@@ -1,4 +1,13 @@
+$.ajaxSetup({
+  username: 'ryanackley',
+  password: 'dummy_password'
+});
 
+QUnit.config.autostart = false;
+window.requestFileSystem  = window.requestFileSystem || window.webkitRequestFileSystem;
+String.prototype.endsWith = function(suffix){
+    return this.lastIndexOf(suffix) == (this.length - suffix.length);
+}
 
 var fail = function(msg, callback){
         return function(){
@@ -6,7 +15,32 @@ var fail = function(msg, callback){
             callback();
         }
     }
+
+    var bytesToString = function(bytes) {
+        var result = "";
+        var i;
+        for (i = 0; i < bytes.length; i++) {
+          result = result.concat(String.fromCharCode(bytes[i]));
+        }
+        return result;
+    }
+      
+    var stringToBytes = function(string) {
+        var bytes = []; 
+        var i; 
+        for(i = 0; i < string.length; i++) {
+          bytes.push(string.charCodeAt(i) & 0xff);
+        }
+        return bytes;
+    }
     
+    var requireShim = function(callback){
+        requirejs(['objectstore/file_repo'], function(FileObjectStore){
+            window.FileObjectStore = FileObjectStore;
+            callback();
+        });
+    }
+
     var verifyDir = function(root, dirName, callback, original){
         var cf = {create:false};
         var components = dirName.split('/');
@@ -62,8 +96,11 @@ var fail = function(msg, callback){
         window.requestFileSystem(window.PERSISTENT, 5*1024*1024*1024, function(fs){
             var dirEntry = fs.root;
             dirEntry.getDirectory(root + 'testDir', {create:true}, function(testDir){
-                start();
-                window.testDir = testDir;
+                require(['utils/file_utils'], function(fileutils){
+                    window.fileutils = fileutils;
+                    start();
+                    window.testDir = testDir;
+                });
             }); 
         });
     }
@@ -72,46 +109,53 @@ var fail = function(msg, callback){
             stop()
             testDir.removeRecursively(function(){
                 window.requestFileSystem(window.PERSISTENT, 5*1024*1024*1024, function(fs){
-                    Gito.FileUtils.rmDir(fs.root, root + 'testDir1', function(){
+                    fileutils.rmDir(fs.root, root + 'testDir1', function(){
                         start();
                     });
                 });
             });
         }
     }
-    
-  $(document).ready(function(){
+$(document).ready(function(){
+    requireShim(function(){
+        qunitTestRun();
+    })
+});
+   var qunitTestRun = function(){
     var taskRunner = window.taskRunner;
-
+    stop();
     
     module("Supporting Lib tests", {setup: testSetup, teardown:testTeardown});
     
     asyncTest("Deflate to Inflate test", function(){
         var msg = "blah blah blah blah blargh smdnakjdhjkahsdjkasd hjka dkja dhjkajk dh ajkd hkja sdhjk";
-        var bytes = Git.stringToBytes(msg);
+        var bytes = stringToBytes(msg);
         expect(1);
         //stop();
-        var compressed = RawDeflate.deflate(bytes);
+        require(['utils/misc_utils'], function(utils){
+            var compressed = utils.deflate(bytes);
         
-        var reader = new FileReader();
-        reader.onloadend = function(){
-            var uncompressed = RawDeflate.inflate(new Uint8Array(reader.result));
-            
-            var reader1 = new FileReader();
-            reader1.onloadend = function(){
-                equal(msg, reader1.result);
-                start();
+            var reader = new FileReader();
+            reader.onloadend = function(){
+                var uncompressed = utils.inflate(new Uint8Array(reader.result));
+                
+                var reader1 = new FileReader();
+                reader1.onloadend = function(){
+                    equal(msg, reader1.result);
+                    start();
+                }
+                reader1.readAsText(new Blob([uncompressed]));
             }
-            reader1.readAsText(uncompressed);
-        }
-        reader.readAsArrayBuffer(compressed);
+            reader.readAsArrayBuffer(new Blob([compressed]));
+        });
+        
     });
     
     asyncTest("FileUtil mk and rm dirs", function(){
         var dirs = ['a','b','c','d','e'];
-        Gito.FileUtils.mkdirs(testDir, dirs.join('/'), function(newDir){
+        fileutils.mkdirs(testDir, dirs.join('/'), function(newDir){
             verifyDir(testDir, dirs.join('/'), function(){
-                Gito.FileUtils.rmDir(testDir,dirs[0], function(){
+                fileutils.rmDir(testDir,dirs[0], function(){
                     testDir.getDirectory(dirs[0], {create:false}, function(){
                         ok(false, "failed to delete directory");
                         start();
@@ -128,11 +172,11 @@ var fail = function(msg, callback){
     asyncTest("FileUtil mk, read, and rm file", function(){
         var path = ['a','b','c','d','test.txt'];
         var content = "Lorem Ipsum\nblargh!";
-        Gito.FileUtils.mkfile(testDir, path.join('/'), content, function(file){
+        fileutils.mkfile(testDir, path.join('/'), content, function(file){
             verifyFile(testDir, path.join('/'), content, function(){
-                Gito.FileUtils.readFile(testDir, path.join('/'), 'Text', function(readContent){
+                fileutils.readFile(testDir, path.join('/'), 'Text', function(readContent){
                     equal(content, readContent);
-                    Gito.FileUtils.rmFile(testDir, path.join('/'), function(){
+                    fileutils.rmFile(testDir, path.join('/'), function(){
                         testDir.getFile(path.join('/'), {create:false}, function(){
                             ok(false, "failed to delete file");
                             start();
@@ -166,12 +210,15 @@ var fail = function(msg, callback){
         });*/
         
         var doSimpleCommit = function(fileName, fileContent, callback){
-            Gito.FileUtils.mkfile(testDir, fileName, fileContent, function(){
-                var repo = new Git.FileRepo(testDir);
-                repo.init(function(){
-                    repo.commit(function(sha){
-                        callback(repo, sha);
-                    });
+            fileutils.mkfile(testDir, fileName, fileContent, function(){
+                // var repo = new Git.FileRepo(testDir);
+                // repo.init(function(){
+                //     repo.commit(function(sha){
+                //         callback(repo, sha);
+                //     });
+                // });
+                GitLite.init(testDir, function(){
+                    GitLite.commit(testDir, callback);
                 });
             });
         }
@@ -187,25 +234,27 @@ var fail = function(msg, callback){
             var fileName = "simple.txt";
             var fileContent = "1";
             
-            doSimpleCommit(fileName, fileContent, function(repo, sha){
-                var store = repo.objectStore;
-                store._retrieveObject(sha, 'Commit', function(commit){
-                    equal('commit', commit.type);
-                    equal(cName, commit.committer.name);
-                    equal(cEmail, commit.committer.email);
-                    equal(aName, commit.author.name);
-                    equal(aEmail, commit.author.email);
-                    equal(message, commit.message);
-                    ok(!commit.parent, "For the first commit, there should be no parent");
-                    var treeSha = commit.tree;
-                    store._retrieveObject(treeSha, 'Tree', function(tree){
-                        equal(1, tree.entries.length);
-                        var entry = tree.entries[0];
-                        equal(true, entry.isBlob);
-                        equal(fileName, entry.name);
-                        store._retrieveObject(entry.sha, 'Blob', function(blob){
-                            var contents = Git.bytesToString(new Uint8Array(blob.data));
-                            start();
+            doSimpleCommit(fileName, fileContent, function(sha){
+                var store = new FileObjectStore(testDir);
+                store.init(function(){
+                    store._retrieveObject(sha, 'Commit', function(commit){
+                        equal('commit', commit.type);
+                        equal(cName, commit.committer.name);
+                        equal(cEmail, commit.committer.email);
+                        equal(aName, commit.author.name);
+                        equal(aEmail, commit.author.email);
+                        equal(message, commit.message);
+                        ok(!commit.parent, "For the first commit, there should be no parent");
+                        var treeSha = commit.tree;
+                        store._retrieveObject(treeSha, 'Tree', function(tree){
+                            equal(1, tree.entries.length);
+                            var entry = tree.entries[0];
+                            equal(true, entry.isBlob);
+                            equal(fileName, entry.name);
+                            store._retrieveObject(entry.sha, 'Blob', function(blob){
+                                var contents = bytesToString(new Uint8Array(blob.data));
+                                start();
+                            });
                         });
                     });
                 });
@@ -214,11 +263,14 @@ var fail = function(msg, callback){
         });
         
         asyncTest("Test Git Commit Parent",function(){
-            doSimpleCommit('simple.txt', '1', function(repo, firstCommitSha){
-                doSimpleCommit('simple.txt', '1\n2', function(repo, secondCommitSha){
-                    repo.objectStore._retrieveObject(secondCommitSha, 'Commit', function(commit){
-                        equal(firstCommitSha, commit.parents[0]);
-                        start();
+            doSimpleCommit('simple.txt', '1', function(firstCommitSha){
+                doSimpleCommit('simple.txt', '1\n2', function(secondCommitSha){
+                    var objectStore = new FileObjectStore(testDir);
+                    objectStore.init(function(){
+                        objectStore._retrieveObject(secondCommitSha, 'Commit', function(commit){
+                            equal(firstCommitSha, commit.parents[0]);
+                            start();
+                        });
                     });
                 });
             });
@@ -235,79 +287,80 @@ var fail = function(msg, callback){
             });
         });*/
         //var fileBuilder = function(files
-        var verifyHead = function(repo, refName, callback){
-            var store = repo.objectStore;
-            store._getHeadForRef(refName, function(sha){
-            
-                var verifyTree = function(tree, dir, callback){
-                    Gito.FileUtils.ls(dir, function(entries){
-                        var sorter = function(a, b){
-                            var nameA = a.name, nameB = b.name;
-                            if (nameA < nameB) //sort string ascending
-                                return -1; 
-                            if (nameA > nameB)
-                                return 1;
-                            return 0;
-                        }
-                        entries.sort(sorter);
-                        tree.sortEntries();
-                        
-                        var pairs = [];
-                        for (var i = 0, j = 0; i < entries.length; i++, j++){
-                            if (entries[i].name == '.git'){
-                                i++;
-                            }
-                            if (tree.entries[j].name != entries[i].name ||
-                                tree.entries[j].isBlob != entries[i].isFile){
-                                ok(false, 'Tree doesn\'t match working directory "' + dir.name + '"');
-                                callback();
-                                return;
-                            }
-                            else if (!tree.entries[j].isBlob){
-                                pairs.push({type:'tree', tree: tree.entries[j], dir: entries[i]});
-                            }
-                            else{
-                                pairs.push({type: 'blob', blob: tree.entries[j], file:entries[i]});
-                            }
-                        }
-                        
-                        pairs.asyncEach(function(item, done){
-                            if (item.type == 'tree'){
-                                store._retrieveObject(item.tree.sha, 'Tree',function(subtree){
-                                    verifyTree(subtree, item.dir, done);
-                                });
-                            }
-                            else{
-                                store._retrieveBlobsAsStrings([item.blob.sha], function(strings){
-                                    Gito.FileUtils.readFileEntry(item.file, 'Text', function(fileString){
-                                        if (fileString != strings[0]){
-                                            ok(false, item.file.name + ' is not up to date');
-                                        }
-                                        else{
-                                            ok(true, item.file.name + ' matches');
-                                        }
-                                        done();
-                                    });
-                                });
-                            }
-                        },
-                        function(){
-                            ok(true, 'Tree matched working directory "' + dir.name + '"');
-                            callback();
-                        });
-                    });
-                }
+        var verifyHead = function(refName, callback){
+            var store = new FileObjectStore(testDir);
+            store.init(function(){
+                store._getHeadForRef(refName, function(sha){
                 
-                store._getTreeFromCommitSha(sha, function(tree){
-                    verifyTree(tree, testDir, callback);
-                });
-            }, fail('couldn\'t find head sha for ' + refName, callback));
+                    var verifyTree = function(tree, dir, callback){
+                        fileutils.ls(dir, function(entries){
+                            var sorter = function(a, b){
+                                var nameA = a.name, nameB = b.name;
+                                if (nameA < nameB) //sort string ascending
+                                    return -1; 
+                                if (nameA > nameB)
+                                    return 1;
+                                return 0;
+                            }
+                            entries.sort(sorter);
+                            tree.sortEntries();
+                            
+                            var pairs = [];
+                            for (var i = 0, j = 0; i < entries.length; i++, j++){
+                                if (entries[i].name == '.git'){
+                                    i++;
+                                }
+                                if (tree.entries[j].name != entries[i].name ||
+                                    tree.entries[j].isBlob != entries[i].isFile){
+                                    ok(false, 'Tree doesn\'t match working directory "' + dir.name + '"');
+                                    callback();
+                                    return;
+                                }
+                                else if (!tree.entries[j].isBlob){
+                                    pairs.push({type:'tree', tree: tree.entries[j], dir: entries[i]});
+                                }
+                                else{
+                                    pairs.push({type: 'blob', blob: tree.entries[j], file:entries[i]});
+                                }
+                            }
+                            
+                            pairs.asyncEach(function(item, done){
+                                if (item.type == 'tree'){
+                                    store._retrieveObject(item.tree.sha, 'Tree',function(subtree){
+                                        verifyTree(subtree, item.dir, done);
+                                    });
+                                }
+                                else{
+                                    store._retrieveBlobsAsStrings([item.blob.sha], function(strings){
+                                        fileutils.readFileEntry(item.file, 'Text', function(fileString){
+                                            if (fileString != strings[0]){
+                                                ok(false, item.file.name + ' is not up to date');
+                                            }
+                                            else{
+                                                ok(true, item.file.name + ' matches');
+                                            }
+                                            done();
+                                        });
+                                    });
+                                }
+                            },
+                            function(){
+                                ok(true, 'Tree matched working directory "' + dir.name + '"');
+                                callback();
+                            });
+                        });
+                    }
+                    
+                    store._getTreeFromCommitSha(sha, function(tree){
+                        verifyTree(tree, testDir, callback);
+                    });
+                }, fail('couldn\'t find head sha for ' + refName, callback));
+            });
         }
         
         asyncTest("Test Clone", function(){
-            var repo = new Git.FileRepo(testDir);
-            repo.clone(knownRepoUrl, function(){
-                verifyHead(repo, 'refs/heads/master', function(){
+            GitLite.clone(testDir, knownRepoUrl, function(){
+                verifyHead('refs/heads/master', function(){
                     ok(true, 'clone was successful');
                     start();
                 });
@@ -320,16 +373,16 @@ var fail = function(msg, callback){
         var setupFileStructure = function(root, files, callback){
             files.asyncEach(function(item, done){
                 if(item.contents){
-                    Gito.FileUtils.mkfile(root, item.name, item.contents, done);
+                    fileutils.mkfile(root, item.name, item.contents, done);
                 }
                 else if (item.rmFile){
-                    Gito.FileUtils.rmFile(root, item.name, done);
+                    fileutils.rmFile(root, item.name, done);
                 }
                 else if (item.rmDir){
-                    Gito.FileUtils.rmDir(root, item.name, done);
+                    fileutils.rmDir(root, item.name, done);
                 }
                 else{
-                    Gito.FileUtils.mkdirs(root, item.name, function(dir){
+                    fileutils.mkdirs(root, item.name, function(dir){
                         setupFileStructure(dir, item.entries, done);
                     });
                 }
@@ -337,7 +390,7 @@ var fail = function(msg, callback){
         }
         
         var blowAwayWorkingDir = function(dir, callback){
-            Gito.FileUtils.ls(dir, function(entries){
+            fileutils.ls(dir, function(entries){
                 entries.asyncEach(function(item, done){
                     if (item.name == '.git'){
                         done();
@@ -368,18 +421,18 @@ var fail = function(msg, callback){
                                    ]}
         ];
         
-        var resetRemote = function(dir, url, initial, callback){
-            var repo = new Git.FileRepo(dir);
-            repo.clone(url, function(){
-                verifyHead(repo, 'refs/heads/master', function(){
+        var resetRemote = function(url, initial, callback){
+            
+            GitLite.clone(testDir, url, function(){
+                verifyHead('refs/heads/master', function(){
                     ok(true, 'clone was successful');
-                    blowAwayWorkingDir(dir, function(){
-                        setupFileStructure(dir, initial, function(){
-                            repo.commit(function(sha){
+                    blowAwayWorkingDir(testDir, function(){
+                        setupFileStructure(testDir, initial, function(){
+                            GitLite.commit(testDir, function(sha){
                                 ok(true, 'commit of new working dir was successful');
-                                repo.push(url, function(){
+                                GitLite.push(testDir, url, function(){
                                     ok(true, 'successfully pushed into url');
-                                    callback(repo);
+                                    callback();
                                 });
                             });
                         });
@@ -389,7 +442,7 @@ var fail = function(msg, callback){
         }
         
         asyncTest("Test Clone, commit, then push", function(){
-            resetRemote(testDir, knownRepoUrl, initial, function(){
+            resetRemote(knownRepoUrl, initial, function(){
                 start();
             });
         });
@@ -399,9 +452,9 @@ var fail = function(msg, callback){
             window.requestFileSystem(window.PERSISTENT, 5*1024*1024*1024, function(fs){
                 var dirEntry = fs.root;
                 dirEntry.getDirectory(root + 'testDir1', {create:true}, function(testDir){
-                    var repo = new Git.FileRepo(testDir);
-                    repo.clone(url, function(){
-                        callback(repo, testDir);
+                    //var repo = new Git.FileRepo(testDir);
+                    GitLite.clone(testDir, url, function(){
+                        callback(testDir);
                     });
                 });
             });
@@ -410,19 +463,19 @@ var fail = function(msg, callback){
             window.requestFileSystem(window.PERSISTENT, 5*1024*1024*1024, function(fs){
                 var dirEntry = fs.root;
                 dirEntry.getDirectory(root + 'testDir2', {create:true}, function(testDir){
-                    var repo = new Git.FileRepo(testDir);
-                    repo.clone(url, function(){
-                        callback(repo, testDir);
+                    //var repo = new Git.FileRepo(testDir);
+                    GitLite.clone(testDir, url, function(){
+                        callback(testDir);
                     });
                 });
             });
         }
         var pushFastForwardCommit = function(url, callback){
             
-            createMirrorRepo(url, function(repo, testDir){
-                Gito.FileUtils.mkfile(testDir, '7.txt', '7\n8\n9', function(){
-                    repo.commit(function(sha){
-                        repo.push(url, function(){
+            createMirrorRepo(url, function(testDir){
+                fileutils.mkfile(testDir, '7.txt', '7\n8\n9', function(){
+                    GitLite.commit(testDir, function(sha){
+                        GitLite.push(testDir, url, function(){
                             callback();
                         });
                     });
@@ -432,19 +485,19 @@ var fail = function(msg, callback){
         }
         
         var setupPullTest = function(initial, callback){
-            var repo = new Git.FileRepo(testDir);
-            repo.clone(knownRepoUrl, function(){
-                resetRemote(testDir, knownRepoUrl, initial, function(repo){
-                    callback(repo);
+            //var repo = new Git.FileRepo(testDir);
+            GitLite.clone(testDir, knownRepoUrl, function(){
+                resetRemote(knownRepoUrl, initial, function(){
+                    callback();
                 });
             });
         }
         
         asyncTest("Test FF Pull simple", function(){
-            setupPullTest(initial, function(repo){
+            setupPullTest(initial, function(){
                 pushFastForwardCommit(knownRepoUrl, function(){
-                    repo.pull(knownRepoUrl, function(){
-                        Gito.FileUtils.readFile(testDir, '7.txt', 'Text', function(data){
+                    GitLite.pull(testDir, knownRepoUrl, function(){
+                        fileutils.readFile(testDir, '7.txt', 'Text', function(data){
                             equal('7\n8\n9', data);
                             start();
                         }, fail('7.txt doesn\'t exist', start));
@@ -481,12 +534,12 @@ var fail = function(msg, callback){
         var fastForwardPullTest = function(name, ops){  
             asyncTest(name, function(){
                 setupPullTest(initial, function(repo){
-                    createMirrorRepo(knownRepoUrl, function(repo1, testDir1){
+                    createMirrorRepo(knownRepoUrl, function(testDir1){
                         setupFileStructure(testDir1, ops, function(){
-                            repo1.commit(function(){
-                                repo1.push(knownRepoUrl, function(){
-                                    repo.pull(knownRepoUrl, function(){
-                                        verifyHead(repo, 'refs/heads/master', function(){
+                            GitLite.commit(testDir1, function(){
+                                GitLite.push(testDir1, knownRepoUrl, function(){
+                                    GitLite.pull(testDir, knownRepoUrl, function(){
+                                        verifyHead('refs/heads/master', function(){
                                             ok(true);
                                             start();
                                         });
@@ -504,7 +557,9 @@ var fail = function(msg, callback){
         fastForwardPullTest("Test FF Pull with a deleted folder", folderDelete);
         fastForwardPullTest("Test FF Pull with a deleted files", fileDelete);
         fastForwardPullTest("Test FF Pull with a changed file", fileChange);
-
+        // asyncTest("reload", function(){
+        //     window.location.reload();
+        // });
 
         module("Tree Merging Tests", {setup: testSetup, teardown:testTeardown});
 
@@ -533,9 +588,9 @@ var fail = function(msg, callback){
         }
 
         var compareDirs = function(expected, actual, callback){
-            Gito.FileUtils.ls(expected, function(expectedFiles){
+            fileutils.ls(expected, function(expectedFiles){
                 expectedFiles.sort(entriesSort);
-                Gito.FileUtils.ls(actual, function(actualFiles){
+                fileutils.ls(actual, function(actualFiles){
                     actualFiles.sort(entriesSort);
                     var isEqual = true;
                     actualFiles.asyncEach(function(item, done, idx){
@@ -584,8 +639,8 @@ var fail = function(msg, callback){
         }
 
         var compareFiles = function(file1, file2, callback){
-            Gito.FileUtils.readFileEntry(file1, "Text", function(data1){
-                Gito.FileUtils.readFileEntry(file2, "Text", function(data2){
+            fileutils.readFileEntry(file1, "Text", function(data1){
+                fileutils.readFileEntry(file2, "Text", function(data2){
                     callback(data1 == data2);
                 });
             });
@@ -623,7 +678,7 @@ var fail = function(msg, callback){
                 });
             });
         }
-
-        mergeTreeTest("FF Merge w/ tree merge test", folderMergeAdd, folderMergeChange, folderMergeAdd);
+        start();
+        //mergeTreeTest("FF Merge w/ tree merge test", folderMergeAdd, folderMergeChange, folderMergeAdd);
         
-   });
+   }

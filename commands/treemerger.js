@@ -1,10 +1,6 @@
-Gito.TreeMerger = function(store){
-	this.store = store;
-}
+define(['utils/misc_utils'], function(utils){
 
-Gito.TreeMerger.prototype = {
-
-	diffTree : function(oldTree, newTree){
+	var diffTree = function(oldTree, newTree){
 		oldTree.sortEntries();
 		newTree.sortEntries();
 		
@@ -42,7 +38,7 @@ Gito.TreeMerger.prototype = {
 				oldIdx++;
 			}
 			else{
-				if (Gito.compareShas(nu.sha,old.sha) != 0){
+				if (utils.compareShas(nu.sha,old.sha) != 0){
 					merge.push({nu:nu, old:old});
 				}
 				oldIdx++;
@@ -50,9 +46,9 @@ Gito.TreeMerger.prototype = {
 			}
 		}
 		return {add:add, remove:remove, merge: merge};
-	},
+	};
 	
-	mergeTrees : function(ourTree, baseTree, theirTree, success, error){
+	 var mergeTrees = function(store, ourTree, baseTree, theirTree, success, error){
 		
 		var finalTree = [], 
 			next = null;
@@ -164,7 +160,6 @@ Gito.TreeMerger.prototype = {
 		}
 		
 		//var mergeBlobs = function(
-		var store = this.store;
 		var self = this;
 		
 		finalTree.asyncEach(function(item, done, index){
@@ -219,5 +214,9 @@ Gito.TreeMerger.prototype = {
 		});
 		
 	}
-
-}
+	return {
+		mergeTrees : mergeTrees,
+		diffTree : diffTree
+	}
+	
+});

@@ -1,49 +1,35 @@
 
-// A parser for the response to /git-upload-pack, which contains some
-// progress information and a pack file. Delegates parsing the packfile to 
-// the packFileParser.
-// 
-// Has methods parse, getRemoteLines and getObjects.
-Git.UploadPackParser = function(binary, repo) {
-  var binaryString = Git.toBinaryString(binary)
-  var data   = new BinaryFile(binaryString);
-  var offset = 0;
-  var remoteLines = null;
-  var objects = null;
-  
-  var peek = function(length) {
-    return data.slice(offset, offset + length);
-  };
-  
-  var advance = function(length) {
-    offset += length;
-  };
-  
-  // A pkt-line is defined in http://git-scm.com/gitserver.txt
-  var nextPktLine = function() {
-    var pktLine = null;
-    var length;
-    length = parseInt(Git.bytesToString(peek(4)), 16);
-    advance(4);
-    if (length == 0) {
-    //   return nextPktLine()
-    } else {
-      pktLine = peek(length - 4);
-      advance(length - 4);
-    }
-    return pktLine;
-  };
-  
-  this.getRemoteLines = function() {
-    return remoteLines;
-  };
-  
-  this.getObjects = function() {
-    return objects;
-  };
-  
-  this.parse = function(success) {
-    console.log("Parsing upload pack of  " + binaryString.length + " bytes")
+define(['formats/pack', 'utils/misc_utils'], function(Pack, utils){
+  var parse = function(arraybuffer, repo, success) {
+    var data   = new Uint8Array(arraybuffer);//new BinaryFile(binaryString);
+    var offset = 0;
+    var remoteLines = null;
+    var objects = null;
+    
+    var peek = function(length) {
+      return Array.prototype.slice.call(data, offset, offset + length);
+    };
+    
+    var advance = function(length) {
+      offset += length;
+    };
+    
+    // A pkt-line is defined in http://git-scm.com/gitserver.txt
+    var nextPktLine = function() {
+      var pktLine = null;
+      var length;
+      length = parseInt(utils.bytesToString(peek(4)), 16);
+      advance(4);
+      if (length == 0) {
+      //   return nextPktLine()
+      } else {
+        pktLine = peek(length - 4);
+        advance(length - 4);
+      }
+      return pktLine;
+    };
+
+    console.log("Parsing upload pack of  " + arraybuffer.byteLength + " bytes")
     var startTime = new Date()
     var pktLine = nextPktLine()
     var packFileParser
@@ -53,7 +39,7 @@ Git.UploadPackParser = function(binary, repo) {
     var ackRegex = /ACK ([0-9a-fA-F]{40}) common/;
     var common = [];
     
-    var pktLineStr = Git.bytesToString(pktLine);
+    var pktLineStr = utils.bytesToString(pktLine);
     while (pktLineStr.slice(0, 7) === "shallow") {
       pktLine = nextPktLine()
     }
@@ -65,7 +51,7 @@ Git.UploadPackParser = function(binary, repo) {
       	common.push(matches[1]);
       }
       pktLine = nextPktLine();
-      pktLineStr = Git.bytesToString(pktLine);
+      pktLineStr = utils.bytesToString(pktLine);
       gotAckOrNak = true;
     }
     
@@ -76,12 +62,12 @@ Git.UploadPackParser = function(binary, repo) {
     while (pktLine !== null) {
       // sideband format. "2" indicates progress messages, "1" pack data
       if (pktLine[0] == 2) {
-        var lineString = Git.bytesToString(pktLine)
+        var lineString = utils.bytesToString(pktLine)
         lineString = lineString.slice(1, lineString.length)
         remoteLine += lineString
       }
       else if (pktLine[0] == 1) {
-        packData += Git.bytesToString(pktLine.slice(1))
+        packData += utils.bytesToString(pktLine.slice(1))
       }
       else if (pktLine[0] == 3) {
         throw(Error("fatal error in packet line"))
@@ -89,7 +75,7 @@ Git.UploadPackParser = function(binary, repo) {
       pktLine = nextPktLine()
     }
     
-    packFileParser = new Git.Pack(packData, repo)
+    packFileParser = new Pack(packData, repo)
     packData = null;
     data = null;
     binaryString = null;
@@ -110,5 +96,6 @@ Git.UploadPackParser = function(binary, repo) {
     });
     
   };
-}
+  return {parse : parse};
+});
 
