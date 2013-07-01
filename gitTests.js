@@ -1,7 +1,3 @@
-$.ajaxSetup({
-  username: 'ryanackley',
-  password: 'dummy_password'
-});
 
 QUnit.config.autostart = false;
 window.requestFileSystem  = window.requestFileSystem || window.webkitRequestFileSystem;
@@ -119,7 +115,7 @@ var fail = function(msg, callback){
 $(document).ready(function(){
     requireShim(function(){
         qunitTestRun();
-    })
+    });
 });
    var qunitTestRun = function(){
     var taskRunner = window.taskRunner;
@@ -678,7 +674,15 @@ $(document).ready(function(){
                 });
             });
         }
-        start();
+        $('#auth-form').submit(function(){
+            $.ajaxSetup({
+              username: $('#username').val(),
+              password: $('#password').val()
+            });
+            start();
+            return false;
+        });
+        //start();
         //mergeTreeTest("FF Merge w/ tree merge test", folderMergeAdd, folderMergeChange, folderMergeAdd);
         
    }
