@@ -14,12 +14,10 @@ define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', '
         AJAX_ERROR: errutils.AJAX_ERROR, 
         // trying to clone into a non-empty directory
         CLONE_DIR_NOT_EMPTY: errutils.CLONE_DIR_NOT_EMPTY,
-        // No .git directory
-        CLONE_DIR_NOT_INTIALIZED: errutils.CLONE_DIR_NOT_INTIALIZED,
         // .git directory already contains objects
         CLONE_GIT_DIR_IN_USE: errutils.CLONE_GIT_DIR_IN_USE,
         // No branch found with the name given
-        CLONE_BRANCH_NOT_FOUND: errutils.CLONE_BRANCH_NOT_FOUND,
+        REMOTE_BRANCH_NOT_FOUND: errutils.REMOTE_BRANCH_NOT_FOUND,
         // only supports fast forward merging at the moment.
         PULL_NON_FAST_FORWARD: errutils.PULL_NON_FAST_FORWARD,
         // Branch is up to date
@@ -28,10 +26,12 @@ define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', '
         COMMIT_NO_CHANGES: errutils.COMMIT_NO_CHANGES,
         // The remote repo and the local repo share the same head.
         PUSH_NO_CHANGES: errutils.PUSH_NO_CHANGES,
-        // Need to merge remote changes first. 
+        // Need to merge remote changes first.
         PUSH_NON_FAST_FORWARD: errutils.PUSH_NON_FAST_FORWARD,
         // unexpected problem retrieving objects
         OBJECT_STORE_CORRUPTED: errutils.OBJECT_STORE_CORRUPTED,
+        // pull is attempted with uncommitted changed
+        PULL_UNCOMMITTED_CHANGES: errutils.PULL_UNCOMMITTED_CHANGES,
 
         
         init : function(options, success, error){
@@ -49,7 +49,7 @@ define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', '
             var objectStore = new FileObjectStore(options.dir);
             objectStore.init(function(){
                 //pull(dir, objectStore, url, callback);
-                pull({dir: options.dir, objectStore: objectStore, url: options.url}, success, error);
+                pull({dir: options.dir, objectStore: objectStore}, success, error);
             }, error);
         },
         commit : function(options, success, error){
@@ -62,7 +62,7 @@ define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', '
         push : function(options, success, error){
             var objectStore = new FileObjectStore(options.dir);
             objectStore.init(function(){
-                push({objectStore: objectStore, url: options.url}, success, error);
+                push({objectStore: objectStore, dir: options.dir, url: options.url}, success, error);
             }, error);
         }
     }

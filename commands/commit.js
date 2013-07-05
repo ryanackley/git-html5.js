@@ -95,7 +95,9 @@ define(['utils/file_utils', 'utils/misc_utils', 'utils/errors'], function (fileu
                     'committer ', username,' <', email, '> ', dateString, '\n\n', commitMsg,'\n');
                 store.writeRawObject('commit', commitContent.join(''), function(commitSha){
                     fileutils.mkfile(dir, '.git/' + ref, commitSha + '\n', function(){
-                        success(commitSha);
+                        store.updateLastChange(function(){
+                            success(commitSha);
+                        });
                     });
                 });
             }, error);

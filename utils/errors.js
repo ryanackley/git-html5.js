@@ -16,8 +16,8 @@ define(function() {
         CLONE_GIT_DIR_IN_USE: 4,
         CLONE_GIT_DIR_IN_USE_MSG: 'The target directory contains a .git directory already in use.',
         // No branch found with the name given
-        CLONE_BRANCH_NOT_FOUND: 5,
-        CLONE_BRANCH_NOT_FOUND_MSG: 'Can\'t find the branch name in the remote repository',
+        REMOTE_BRANCH_NOT_FOUND: 5,
+        REMOTE_BRANCH_NOT_FOUND_MSG: 'Can\'t find the branch name in the remote repository',
 
         // only supports fast forward merging at the moment.
         PULL_NON_FAST_FORWARD: 6,
@@ -25,6 +25,9 @@ define(function() {
         // Branch is up to date
         PULL_UP_TO_DATE: 7,
         PULL_UP_TO_DATE_MSG: 'Everything is up to date',
+
+        PULL_UNCOMMITTED_CHANGES: 11,
+        PULL_UNCOMMITTED_CHANGES_MSG: 'There are changes in the working directory that haven\'t been committed',
 
         // Nothing to commit
         COMMIT_NO_CHANGES: 8,

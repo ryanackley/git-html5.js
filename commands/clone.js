@@ -65,13 +65,14 @@ define(['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index
 
                     if (!localHeadRef){
                         if (options.branch){
-                            error({type: errutils.CLONE_BRANCH_NOT_FOUND, msg: errutils.CLONE_BRANCH_NOT_FOUND_MSG});
+                            error({type: errutils.REMOTE_BRANCH_NOT_FOUND, msg: errutils.REMOTE_BRANCH_NOT_FOUND_MSG});
                             return;
                         }
                         else{
                             localHeadRef = remoteHeadRef;
                         }
                     }
+
                     mkfile(gitDir, "HEAD", 'ref: ' + localHeadRef.name + '\n', function(){
                         mkfile(gitDir, localHeadRef.name, localHeadRef.sha + '\n', function(){
                             remote.fetchRef([localHeadRef], null, null, function(objects, packData){
@@ -90,7 +91,10 @@ define(['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index
                                     
                                     var packIdx = new PackIndex(packIdxData);
                                     store.loadWith(objectsDir, [{pack: new Pack(packData, self), idx: packIdx}]);
-                                    _createCurrentTreeFromPack(dir, store, localHeadRef.sha, callback);
+                                    _createCurrentTreeFromPack(dir, store, localHeadRef.sha, function(){
+                                        var config = {url: url, time: new Date()};
+                                        mkfile(gitDir, 'config.json', JSON.stringify(config), callback, ferror);    
+                                    });
                                 }, ferror); 
                             });
                         }, ferror);

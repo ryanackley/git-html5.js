@@ -631,7 +631,7 @@ $(document).ready(function(){
                 start();
             },
             function(e){
-                equal(GitLite.CLONE_BRANCH_NOT_FOUND, e.type);
+                equal(GitLite.REMOTE_BRANCH_NOT_FOUND, e.type);
                 start();
             });
         });
@@ -717,6 +717,23 @@ $(document).ready(function(){
                                 equal(GitLite.PUSH_NON_FAST_FORWARD, e.type);
                                 start();
                             });
+                        });
+                    });
+                });
+            });
+        });
+
+        asyncTest("pull with uncommitted changes", function(){
+            setupPullTest(initial, function(){
+                pushFastForwardCommit(knownRepoUrl, function(){
+                    setupFileStructure(testDir, folderMergeChange, function(){
+                        GitLite.pull({dir: testDir, url: knownRepoUrl}, function(){
+                            fail("error should've been thrown");
+                            start();
+                        },
+                        function(e){
+                            equal(GitLite.PULL_UNCOMMITTED_CHANGES, e.type);
+                            start();
                         });
                     });
                 });

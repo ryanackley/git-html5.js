@@ -398,6 +398,32 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 			this.writeRawObject('tree', new Blob(bb), function(sha){
 				success(sha);
 			});
+		},
+
+		getConfig : function(success){
+			var fe = this.fileError;
+
+			fileutils.readFile(this.dir, '.git/config.json', 'Text', function(configStr){
+				success(JSON.parse(configStr));
+			}, function(e){
+				if (e.code == FileError.NOT_FOUND_ERR){
+					success({});
+				}
+				else{
+					fe(e);
+				}
+			});
+		},
+
+		updateLastChange : function(success){
+			var dir = this.dir,
+				fe = this.fileError;
+
+			this.getConfig(function(config){
+				config.time = new Date();
+				var configStr = JSON.stringify(config);
+				fileutils.mkfile(dir, '.git/config.json', configStr, success, fe);
+			});
 		}
 		
 	}

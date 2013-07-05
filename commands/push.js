@@ -2,20 +2,19 @@ define(['formats/smart_http_remote', 'formats/pack'], function(SmartHttpRemote, 
     var push = function(options, success, error){
         
         var store = options.objectStore,
-            url = options.url;
+            dir = options.dir;
 
-        var remote = new SmartHttpRemote(store, "origin", url, error);
-        remote.fetchReceiveRefs(function(refs){
-            store._getCommitsForPush(refs, function(commits, ref){
-                Pack.buildPack(commits, store, function(packData){
-                    var p = new Pack(packData, store);
-                    p.parseAll(function(){
+        store.getConfig(function(config){
+            var url = config.url || options.url;
+            var remote = new SmartHttpRemote(store, "origin", url, error);
+            remote.fetchReceiveRefs(function(refs){
+                store._getCommitsForPush(refs, function(commits, ref){
+                    Pack.buildPack(commits, store, function(packData){
                         remote.pushRefs([ref], packData, success);
                     });
-                });
-            }, error);
+                }, error);
+            });
         });
     }
-
     return push;
 });

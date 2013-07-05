@@ -347,23 +347,23 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils'], function(a
       return _(objects).detect(function(obj) { return obj.offset == offset })
     }
     
-    var expandOffsetDeltas = function(callback) {
-      var progress = {counter:0}
-      function markProgress(){
-      	progress.counter += 1;
-      	if (progress.counter == objects.length){
-      		callback();
-      	}
-      }
-      _(objects).each(function(object) {
-  		if (object.type != "ofs_delta" && object.chain.length) {
-  		  expandOffsetDelta(object, markProgress)
-  		}
-  		else{
-  			markProgress();
-  		}
-      })
-    }
+    // var expandOffsetDeltas = function(callback) {
+    //   var progress = {counter:0}
+    //   function markProgress(){
+    //   	progress.counter += 1;
+    //   	if (progress.counter == objects.length){
+    //   		callback();
+    //   	}
+    //   }
+    //   _(objects).each(function(object) {
+  		// if (object.type != "ofs_delta" && object.chain.length) {
+  		//   expandOffsetDelta(object, markProgress)
+  		// }
+  		// else{
+  		// 	markProgress();
+  		// }
+    //   })
+    // }
     
     //var expandDelta = function(object) {
       

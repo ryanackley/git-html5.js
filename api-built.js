@@ -1081,7 +1081,9 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
         reader['readAs' + dataType](new Blob([out]));
       }
       else{
-        callback(utils.trimBuffer(out), out.compressedLength);
+        window.setTimeout(function(){
+          callback(utils.trimBuffer(out), out.compressedLength);
+        }, 0);
       }
       // var blob = RawDeflate.inflate(deflated)
       // var reader = new FileReader();
@@ -1145,23 +1147,23 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
       return _(objects).detect(function(obj) { return obj.offset == offset })
     }
     
-    var expandOffsetDeltas = function(callback) {
-      var progress = {counter:0}
-      function markProgress(){
-      	progress.counter += 1;
-      	if (progress.counter == objects.length){
-      		callback();
-      	}
-      }
-      _(objects).each(function(object) {
-  		if (object.type != "ofs_delta" && object.chain.length) {
-  		  expandOffsetDelta(object, markProgress)
-  		}
-  		else{
-  			markProgress();
-  		}
-      })
-    }
+    // var expandOffsetDeltas = function(callback) {
+    //   var progress = {counter:0}
+    //   function markProgress(){
+    //   	progress.counter += 1;
+    //   	if (progress.counter == objects.length){
+    //   		callback();
+    //   	}
+    //   }
+    //   _(objects).each(function(object) {
+  		// if (object.type != "ofs_delta" && object.chain.length) {
+  		//   expandOffsetDelta(object, markProgress)
+  		// }
+  		// else{
+  		// 	markProgress();
+  		// }
+    //   })
+    // }
     
     //var expandDelta = function(object) {
       
@@ -1524,8 +1526,8 @@ define('utils/errors',[],function() {
         CLONE_GIT_DIR_IN_USE: 4,
         CLONE_GIT_DIR_IN_USE_MSG: 'The target directory contains a .git directory already in use.',
         // No branch found with the name given
-        CLONE_BRANCH_NOT_FOUND: 5,
-        CLONE_BRANCH_NOT_FOUND_MSG: 'Can\'t find the branch name in the remote repository',
+        REMOTE_BRANCH_NOT_FOUND: 5,
+        REMOTE_BRANCH_NOT_FOUND_MSG: 'Can\'t find the branch name in the remote repository',
 
         // only supports fast forward merging at the moment.
         PULL_NON_FAST_FORWARD: 6,
@@ -1533,6 +1535,9 @@ define('utils/errors',[],function() {
         // Branch is up to date
         PULL_UP_TO_DATE: 7,
         PULL_UP_TO_DATE_MSG: 'Everything is up to date',
+
+        PULL_UNCOMMITTED_CHANGES: 11,
+        PULL_UNCOMMITTED_CHANGES_MSG: 'There are changes in the working directory that haven\'t been committed',
 
         // Nothing to commit
         COMMIT_NO_CHANGES: 8,
@@ -2179,13 +2184,14 @@ define('commands/clone',['commands/object2file', 'formats/smart_http_remote', 'f
 
                     if (!localHeadRef){
                         if (options.branch){
-                            error({type: errutils.CLONE_BRANCH_NOT_FOUND, msg: errutils.CLONE_BRANCH_NOT_FOUND_MSG});
+                            error({type: errutils.REMOTE_BRANCH_NOT_FOUND, msg: errutils.REMOTE_BRANCH_NOT_FOUND_MSG});
                             return;
                         }
                         else{
                             localHeadRef = remoteHeadRef;
                         }
                     }
+
                     mkfile(gitDir, "HEAD", 'ref: ' + localHeadRef.name + '\n', function(){
                         mkfile(gitDir, localHeadRef.name, localHeadRef.sha + '\n', function(){
                             remote.fetchRef([localHeadRef], null, null, function(objects, packData){
@@ -2204,7 +2210,10 @@ define('commands/clone',['commands/object2file', 'formats/smart_http_remote', 'f
                                     
                                     var packIdx = new PackIndex(packIdxData);
                                     store.loadWith(objectsDir, [{pack: new Pack(packData, self), idx: packIdx}]);
-                                    _createCurrentTreeFromPack(dir, store, localHeadRef.sha, callback);
+                                    _createCurrentTreeFromPack(dir, store, localHeadRef.sha, function(){
+                                        var config = {url: url, time: new Date()};
+                                        mkfile(gitDir, 'config.json', JSON.stringify(config), callback, ferror);    
+                                    });
                                 }, ferror); 
                             });
                         }, ferror);
@@ -2312,7 +2321,9 @@ define('commands/commit',['utils/file_utils', 'utils/misc_utils', 'utils/errors'
                     'committer ', username,' <', email, '> ', dateString, '\n\n', commitMsg,'\n');
                 store.writeRawObject('commit', commitContent.join(''), function(commitSha){
                     fileutils.mkfile(dir, '.git/' + ref, commitSha + '\n', function(){
-                        success(commitSha);
+                        store.updateLastChange(function(){
+                            success(commitSha);
+                        });
                     });
                 });
             }, error);
@@ -2614,106 +2625,152 @@ define('commands/pull',['commands/treemerger', 'commands/object2file', 'formats/
     
     };
 
-    var checkForUncommittedChanges = function(dir, objectStore, callback, error){
-
+    var checkForUncommittedChanges = function(dir, lastUpdate, callback, error){
+        var walkDir = function(dir, callback){
+            dir.getMetadata(function(md){
+                if (md.modificationTime > lastUpdate){
+                    callback(true);
+                }
+                else{
+                    fileutils.ls(dir, function(entries){
+                        var changed;
+                        entries.asyncEach(function(entry, done){
+                            if (entry.isDirectory){
+                                walkDir(entry, function(isChanged){
+                                    changed |= isChanged;
+                                    done();
+                                });
+                            }
+                            else{
+                                done();
+                            }
+                        },function(){
+                            callback(changed);
+                        });
+                    });
+                }
+            });
+        };
+        walkDir(dir, function(changed){
+            if (changed){
+                error({type: errutils.PULL_UNCOMMITTED_CHANGES, msg: errutils.PULL_UNCOMMITTED_CHANGES_MSG});
+            }
+            else{
+                callback();
+            }
+        });
     };
 
     var pull = function(options, success, error){
 
         var dir = options.dir,
             store = options.objectStore,
-            url = options.url,
             callback = success,
             ferror = errutils.fileErrorFunc(error);
 
         mkdirs = fileutils.mkdirs,
         mkfile = fileutils.mkfile,
-        remote = new SmartHttpRemote(store, "origin", url, error);
-        
-        var nonFastForward = function(){
-            error({type: errutils.PULL_NON_FAST_FORWARD, msg: errutils.PULL_NON_FAST_FORWARD_MSG});
-        };
 
-        var upToDate = function(){
-            error({type: errutils.PULL_UP_TO_DATE, msg: errutils.PULL_UP_TO_DATE_MSG});
-        };
+        fileutils.readFile(dir, '.git/config.json', 'Text', function(configStr){
+            var repoConfig = JSON.parse(configStr),
+                lastUpdate = new Date(repoConfig.time);
 
-        // get the current branch
-        fileutils.readFile(dir, '.git/HEAD', 'Text', function(headStr){
+            checkForUncommittedChanges(dir, lastUpdate, function(){
+                var url = repoConfig.url;
+
+                remote = new SmartHttpRemote(store, "origin", url, error);
             
-            // get rid of the initial 'ref: ' plus newline at end
-            var headRefName = headStr.substring(5).trim();
+                var nonFastForward = function(){
+                    error({type: errutils.PULL_NON_FAST_FORWARD, msg: errutils.PULL_NON_FAST_FORWARD_MSG});
+                };
 
-            remote.fetchRefs(function(refs){
-                var headSha, branchRef, wantRef;
-                
-                refs.some(function(ref){
-                    if (ref.name == headRefName){
-                        branchRef = ref;
-                        return true;
-                    }
-                });
+                var upToDate = function(){
+                    error({type: errutils.PULL_UP_TO_DATE, msg: errutils.PULL_UP_TO_DATE_MSG});
+                };
 
-                if (branchRef){
-                     // see if we know about the branch's head commit if so, we're up to date, if not, request from remote
-                    store._retrieveRawObject(branchRef.sha, 'ArrayBuffer', upToDate, function(){
-                        wantRef = branchRef;
-                        // Get the sha from the ref name 
-                        store._getHeadForRef(branchRef.name, function(sha){
-                            branchRef.localHead = sha;
-                            
-                            store._getCommitGraph([sha], 32, function(commits, nextLevel){
-                                remote.fetchRef([wantRef], commits, nextLevel, function(objects, packData, common){
-                                    // fast forward merge
-                                    if (common.indexOf(wantRef.localHead) != -1){
-                                        var packSha = packData.subarray(packData.length - 20);
-                                        
-                                        var packIdxData = PackIndex.writePackIdx(objects, packSha);
-                                        
-                                        // get a view of the sorted shas
-                                        var sortedShas = new Uint8Array(packIdxData, 4 + 4 + (256 * 4), objects.length * 20);
-                                        packNameSha = Crypto.SHA1(sortedShas);
-                                        
-                                        var packName = 'pack-' + packNameSha;
-                                        mkdirs(store.dir, '.git/objects', function(objectsDir){
-                                            store.objectsDir = objectsDir;
-                                            mkfile(objectsDir, 'pack/' + packName + '.pack', packData.buffer);
-                                            mkfile(objectsDir, 'pack/' + packName + '.idx', packIdxData);
-                                            
-                                            var packIdx = new PackIndex(packIdxData);
-                                            if (!store.packs){
-                                                store.packs = [];
-                                            }
-                                            store.packs.push({pack: new Pack(packData, store), idx: packIdx});
-                                        
-                                            mkfile(store.dir, '.git/' + wantRef.name, wantRef.sha, function(){
-                                                store._getTreesFromCommits([wantRef.localHead, wantRef.sha], function(trees){
-                                                    _updateWorkingTree(dir, store, trees[0], trees[1], success);
-                                                });
-                                            }); 
-                                        });
-                                    }
-                                    else{
-                                        // non-fast-forward merge
-                                        nonFastForward();
-                                        // var shas = [wantRef.localHead, common[i], wantRef.sha]
-                                        // store._getTreesFromCommits(shas, function(trees){
-                                        //     treeMerger.mergeTrees(store, trees[0], trees[1], trees[2], function(finalTree){
-                                        //         mkfile(store.dir, '.git/' + wantRef.name, sha, done); 
-                                        //     }, function(e){errors.push(e);done();});
-                                        // });
-                                        
-                                    }
-                                        
+                // get the current branch
+                fileutils.readFile(dir, '.git/HEAD', 'Text', function(headStr){
+                    
+                    // get rid of the initial 'ref: ' plus newline at end
+                    var headRefName = headStr.substring(5).trim();
+
+                    remote.fetchRefs(function(refs){
+                        var headSha, branchRef, wantRef;
+                        
+                        refs.some(function(ref){
+                            if (ref.name == headRefName){
+                                branchRef = ref;
+                                return true;
+                            }
+                        });
+
+                        if (branchRef){
+                             // see if we know about the branch's head commit if so, we're up to date, if not, request from remote
+                            store._retrieveRawObject(branchRef.sha, 'ArrayBuffer', upToDate, function(){
+                                wantRef = branchRef;
+                                // Get the sha from the ref name 
+                                store._getHeadForRef(branchRef.name, function(sha){
+                                    branchRef.localHead = sha;
                                     
-                                }, nonFastForward);
-                            });
-                                                         
-                        }, ferror);
-                    }); 
-                }        
-            });
-        }, ferror);
+                                    store._getCommitGraph([sha], 32, function(commits, nextLevel){
+                                        remote.fetchRef([wantRef], commits, nextLevel, function(objects, packData, common){
+                                            // fast forward merge
+                                            if (common.indexOf(wantRef.localHead) != -1){
+                                                var packSha = packData.subarray(packData.length - 20);
+                                                
+                                                var packIdxData = PackIndex.writePackIdx(objects, packSha);
+                                                
+                                                // get a view of the sorted shas
+                                                var sortedShas = new Uint8Array(packIdxData, 4 + 4 + (256 * 4), objects.length * 20);
+                                                packNameSha = Crypto.SHA1(sortedShas);
+                                                
+                                                var packName = 'pack-' + packNameSha;
+                                                mkdirs(store.dir, '.git/objects', function(objectsDir){
+                                                    store.objectsDir = objectsDir;
+                                                    mkfile(objectsDir, 'pack/' + packName + '.pack', packData.buffer);
+                                                    mkfile(objectsDir, 'pack/' + packName + '.idx', packIdxData);
+                                                    
+                                                    var packIdx = new PackIndex(packIdxData);
+                                                    if (!store.packs){
+                                                        store.packs = [];
+                                                    }
+                                                    store.packs.push({pack: new Pack(packData, store), idx: packIdx});
+                                                
+                                                    mkfile(store.dir, '.git/' + wantRef.name, wantRef.sha, function(){
+                                                        store._getTreesFromCommits([wantRef.localHead, wantRef.sha], function(trees){
+                                                            _updateWorkingTree(dir, store, trees[0], trees[1], function(){
+                                                                store.updateLastChange(success);
+                                                            });
+                                                        });
+                                                    }); 
+                                                });
+                                            }
+                                            else{
+                                                // non-fast-forward merge
+                                                nonFastForward();
+                                                // var shas = [wantRef.localHead, common[i], wantRef.sha]
+                                                // store._getTreesFromCommits(shas, function(trees){
+                                                //     treeMerger.mergeTrees(store, trees[0], trees[1], trees[2], function(finalTree){
+                                                //         mkfile(store.dir, '.git/' + wantRef.name, sha, done); 
+                                                //     }, function(e){errors.push(e);done();});
+                                                // });
+                                                
+                                            }
+                                                
+                                            
+                                        }, nonFastForward);
+                                    });
+                                                                 
+                                }, ferror);
+                            }); 
+                        }
+                        else{
+                            error({type: errutils.REMOTE_BRANCH_NOT_FOUND, msg: errutils.REMOTE_BRANCH_NOT_FOUND_MSG});
+                        }        
+                    });
+                }, ferror);
+            }, error);
+        }, ferror)
     }
     return pull;
 });
@@ -2721,21 +2778,20 @@ define('commands/push',['formats/smart_http_remote', 'formats/pack'], function(S
     var push = function(options, success, error){
         
         var store = options.objectStore,
-            url = options.url;
+            dir = options.dir;
 
-        var remote = new SmartHttpRemote(store, "origin", url, error);
-        remote.fetchReceiveRefs(function(refs){
-            store._getCommitsForPush(refs, function(commits, ref){
-                Pack.buildPack(commits, store, function(packData){
-                    var p = new Pack(packData, store);
-                    p.parseAll(function(){
+        store.getConfig(function(config){
+            var url = config.url || options.url;
+            var remote = new SmartHttpRemote(store, "origin", url, error);
+            remote.fetchReceiveRefs(function(refs){
+                store._getCommitsForPush(refs, function(commits, ref){
+                    Pack.buildPack(commits, store, function(packData){
                         remote.pushRefs([ref], packData, success);
                     });
-                });
-            }, error);
+                }, error);
+            });
         });
     }
-
     return push;
 });
 define('objectstore/objects',['utils/misc_utils'], function(utils){
@@ -3288,6 +3344,32 @@ define('objectstore/file_repo',['formats/pack', 'formats/pack_index', 'objectsto
 			}
 			this.writeRawObject('tree', new Blob(bb), function(sha){
 				success(sha);
+			});
+		},
+
+		getConfig : function(success){
+			var fe = this.fileError;
+
+			fileutils.readFile(this.dir, '.git/config.json', 'Text', function(configStr){
+				success(JSON.parse(configStr));
+			}, function(e){
+				if (e.code == FileError.NOT_FOUND_ERR){
+					success({});
+				}
+				else{
+					fe(e);
+				}
+			});
+		},
+
+		updateLastChange : function(success){
+			var dir = this.dir,
+				fe = this.fileError;
+
+			this.getConfig(function(config){
+				config.time = new Date();
+				var configStr = JSON.stringify(config);
+				fileutils.mkfile(dir, '.git/config.json', configStr, success, fe);
 			});
 		}
 		
@@ -8323,12 +8405,10 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
         AJAX_ERROR: errutils.AJAX_ERROR, 
         // trying to clone into a non-empty directory
         CLONE_DIR_NOT_EMPTY: errutils.CLONE_DIR_NOT_EMPTY,
-        // No .git directory
-        CLONE_DIR_NOT_INTIALIZED: errutils.CLONE_DIR_NOT_INTIALIZED,
         // .git directory already contains objects
         CLONE_GIT_DIR_IN_USE: errutils.CLONE_GIT_DIR_IN_USE,
         // No branch found with the name given
-        CLONE_BRANCH_NOT_FOUND: errutils.CLONE_BRANCH_NOT_FOUND,
+        REMOTE_BRANCH_NOT_FOUND: errutils.REMOTE_BRANCH_NOT_FOUND,
         // only supports fast forward merging at the moment.
         PULL_NON_FAST_FORWARD: errutils.PULL_NON_FAST_FORWARD,
         // Branch is up to date
@@ -8337,10 +8417,12 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
         COMMIT_NO_CHANGES: errutils.COMMIT_NO_CHANGES,
         // The remote repo and the local repo share the same head.
         PUSH_NO_CHANGES: errutils.PUSH_NO_CHANGES,
-        // Need to merge remote changes first. 
+        // Need to merge remote changes first.
         PUSH_NON_FAST_FORWARD: errutils.PUSH_NON_FAST_FORWARD,
         // unexpected problem retrieving objects
         OBJECT_STORE_CORRUPTED: errutils.OBJECT_STORE_CORRUPTED,
+        // pull is attempted with uncommitted changed
+        PULL_UNCOMMITTED_CHANGES: errutils.PULL_UNCOMMITTED_CHANGES,
 
         
         init : function(options, success, error){
@@ -8358,7 +8440,7 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
             var objectStore = new FileObjectStore(options.dir);
             objectStore.init(function(){
                 //pull(dir, objectStore, url, callback);
-                pull({dir: options.dir, objectStore: objectStore, url: options.url}, success, error);
+                pull({dir: options.dir, objectStore: objectStore}, success, error);
             }, error);
         },
         commit : function(options, success, error){
@@ -8371,7 +8453,7 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
         push : function(options, success, error){
             var objectStore = new FileObjectStore(options.dir);
             objectStore.init(function(){
-                push({objectStore: objectStore, url: options.url}, success, error);
+                push({objectStore: objectStore, dir: options.dir, url: options.url}, success, error);
             }, error);
         }
     }
