@@ -4,37 +4,66 @@
 //     }
 // });
 
-define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', 'commands/push', 'objectstore/file_repo', 'thirdparty/2.2.0-sha1', 'thirdparty/crc32', 'thirdparty/deflate.min', 'thirdparty/inflate.min'], function(clone, commit, init, pull, push, FileObjectStore){
+define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', 'commands/push', 'objectstore/file_repo', 'utils/errors', 'thirdparty/2.2.0-sha1', 'thirdparty/crc32', 'thirdparty/deflate.min', 'thirdparty/inflate.min'], function(clone, commit, init, pull, push, FileObjectStore, errutils){
     
     var api = {
-        init : function(dir, callback){
-            var objectStore = new FileObjectStore(dir);
-            init(objectStore, callback);
+
+         // Indicates an unexpected error in the file system.
+        FILE_IO_ERROR: errutils.FILE_IO_ERROR,
+        // Indicates an unexpected ajax error when trying to make a request
+        AJAX_ERROR: errutils.AJAX_ERROR, 
+        // trying to clone into a non-empty directory
+        CLONE_DIR_NOT_EMPTY: errutils.CLONE_DIR_NOT_EMPTY,
+        // No .git directory
+        CLONE_DIR_NOT_INTIALIZED: errutils.CLONE_DIR_NOT_INTIALIZED,
+        // .git directory already contains objects
+        CLONE_GIT_DIR_IN_USE: errutils.CLONE_GIT_DIR_IN_USE,
+        // No branch found with the name given
+        CLONE_BRANCH_NOT_FOUND: errutils.CLONE_BRANCH_NOT_FOUND,
+        // only supports fast forward merging at the moment.
+        PULL_NON_FAST_FORWARD: errutils.PULL_NON_FAST_FORWARD,
+        // Branch is up to date
+        PULL_UP_TO_DATE: errutils.PULL_UP_TO_DATE,
+        // Nothing to commit
+        COMMIT_NO_CHANGES: errutils.COMMIT_NO_CHANGES,
+        // The remote repo and the local repo share the same head.
+        PUSH_NO_CHANGES: errutils.PUSH_NO_CHANGES,
+        // Need to merge remote changes first. 
+        PUSH_NON_FAST_FORWARD: errutils.PUSH_NON_FAST_FORWARD,
+        // unexpected problem retrieving objects
+        OBJECT_STORE_CORRUPTED: errutils.OBJECT_STORE_CORRUPTED,
+
+        
+        init : function(options, success, error){
+            var objectStore = new FileObjectStore(options.dir);
+            init({objectStore: objectStore}, success, error);
         },
-        clone : function(dir, url, callback){
-            var objectStore = new FileObjectStore(dir);
+        clone : function(options, success, error){
+            var objectStore = new FileObjectStore(options.dir);
             objectStore.init(function(){
-                clone(dir, objectStore, url, callback);
-            });
+                //clone(dir, objectStore, url, callback);
+                clone({dir: options.dir, branch: options.branch, objectStore: objectStore, url: options.url}, success, error);
+            }, error);
         },
-        pull : function(dir, url, callback){
-            var objectStore = new FileObjectStore(dir);
+        pull : function(options, success, error){
+            var objectStore = new FileObjectStore(options.dir);
             objectStore.init(function(){
-                pull(dir, objectStore, url, callback);
-            });
+                //pull(dir, objectStore, url, callback);
+                pull({dir: options.dir, objectStore: objectStore, url: options.url}, success, error);
+            }, error);
         },
-        commit : function(dir, callback){
-            var objectStore = new FileObjectStore(dir);
+        commit : function(options, success, error){
+            var objectStore = new FileObjectStore(options.dir);
             objectStore.init(function(){
-                commit(dir, objectStore, callback);
-            })
-            
+                //commit(dir, objectStore, callback);
+                commit({dir: options.dir, username: options.username, email: options.email, commitMsg: options.commitMsg, objectStore: objectStore}, success, error);
+            }, error);
         },
-        push : function(dir, url, callback){
-            var objectStore = new FileObjectStore(dir);
+        push : function(options, success, error){
+            var objectStore = new FileObjectStore(options.dir);
             objectStore.init(function(){
-                push(objectStore, url, callback);
-            });
+                push({objectStore: objectStore, url: options.url}, success, error);
+            }, error);
         }
     }
     return api;

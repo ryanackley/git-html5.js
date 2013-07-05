@@ -26,28 +26,27 @@ define(['utils/misc_utils'], function(utils){
 			return Array.prototype.slice.call(list || [], 0);
 		}
 		
-		
-		var makeFile = function(root, filename, contents, callback){
+		var makeFile = function(root, filename, contents, callback, error){
 			root.getFile(filename, {create:true}, function(fileEntry){
 				fileEntry.createWriter(function(writer){
 					writer.onwriteend = function(){
 						if (callback)
-							callback();
+							callback(fileEntry);
 					}
 					if (contents instanceof ArrayBuffer){
 						contents = new Uint8Array(contents);
 					}
 					writer.write(new Blob([contents]));
-				});
-			});
+				}, error);
+			}, error);
 		}
 		
-		var makeDir = function(root, dirname, callback){
-			root.getDirectory(dirname, {create:true},callback);
+		var makeDir = function(root, dirname, callback, error){
+			root.getDirectory(dirname, {create:true},callback, error);
 		}
 		
 		return {
-			mkdirs : function(root, dirname, callback){
+			mkdirs : function(root, dirname, callback, error){
 				var pathParts;
 				if (dirname instanceof Array){
 					pathParts = dirname;
@@ -58,7 +57,7 @@ define(['utils/misc_utils'], function(utils){
 				
 				var makeDirCallback = function(dir){
 					if (pathParts.length){
-						makeDir(dir, pathParts.shift(), makeDirCallback);
+						makeDir(dir, pathParts.shift(), makeDirCallback, error);
 					}
 					else{
 						if (callback)
@@ -77,21 +76,21 @@ define(['utils/misc_utils'], function(utils){
 					fileEntry.remove(callback, utils.errorHandler);
 				});
 			},
-			mkfile : function(root, filename, contents, callback){
+			mkfile : function(root, filename, contents, callback, error){
 				if (filename.charAt(0) == '/'){
 					filename = filename.substring(1);
 				}
 				var pathParts = filename.split('/');
 				if (pathParts.length > 1){
 					FileUtils.mkdirs(root, pathParts.slice(0, pathParts.length - 1), function(dir){
-						makeFile(dir, pathParts[pathParts.length - 1], contents, callback);
-					});
+						makeFile(dir, pathParts[pathParts.length - 1], contents, callback, error);
+					}, error);
 				}
 				else{
-					makeFile(root, filename, contents, callback);
+					makeFile(root, filename, contents, callback, error);
 				}
 			},
-			ls: function(dir, callback){
+			ls: function(dir, callback, error){
 				var reader = dir.createReader();
 				var entries = [];
 				
@@ -103,7 +102,7 @@ define(['utils/misc_utils'], function(utils){
 							entries = entries.concat(toArray(results));
 							readEntries();
 						}
-					}, function(){});
+					}, error);
 				}
 				readEntries();
 				
@@ -120,11 +119,11 @@ define(['utils/misc_utils'], function(utils){
 					FileUtils.readBlob(file, dataType, callback);
 				});
 			},
-			readFile : function(root, file, dataType, callback, onerror) {
+			readFile : function(root, file, dataType, callback, error) {
 				
 				root.getFile(file, {create:false}, function(fileEntry){
-					FileUtils.readFileEntry(fileEntry, dataType, callback);
-				}, onerror ? onerror : utils.errorHandler);
+					FileUtils.readFileEntry(fileEntry, dataType, callback, error);
+				}, error);
 			}
 		
 		};

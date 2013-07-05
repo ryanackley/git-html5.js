@@ -58,8 +58,8 @@ define(function(){
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;');
       },
-        convertShaToBytes : function(sha){
-            var bytes = new Array(sha.length/2);
+        convertShaToBytes: function(sha){
+            var bytes = new Uint8Array(sha.length/2);
             for (var i = 0; i < sha.length; i+=2)
             {
                 bytes[i/2] = parseInt('0x' + sha.substr(i, 2));
@@ -100,32 +100,6 @@ define(function(){
                 buffer = data.buffer.slice(data.byteOffset, data.byteLength + data.byteOffset);
             }
             return buffer;
-        },
-        errorHandler : function(e) {
-          var msg = '';
-        
-          switch (e.code) {
-            case FileError.QUOTA_EXCEEDED_ERR:
-              msg = 'QUOTA_EXCEEDED_ERR';
-              break;
-            case FileError.NOT_FOUND_ERR:
-              msg = 'NOT_FOUND_ERR';
-              break;
-            case FileError.SECURITY_ERR:
-              msg = 'SECURITY_ERR';
-              break;
-            case FileError.INVALID_MODIFICATION_ERR:
-              msg = 'INVALID_MODIFICATION_ERR';
-              break;
-            case FileError.INVALID_STATE_ERR:
-              msg = 'INVALID_STATE_ERR';
-              break;
-            default:
-              msg = 'Unknown Error';
-              break;
-          };
-        
-          console.log('Error: ' + msg);
         }
     }
 

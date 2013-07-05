@@ -190,7 +190,7 @@ $(document).ready(function(){
         });
     });
     
-    var knownRepoUrl = /*'http://localhost/git/testDir';*/'https://github.com/ryanackley/GitTest.git';
+    var knownRepoUrl = /*'http://localhost:8080/GitServerTest/git/testDir';*/'https://github.com/ryanackley/GitTest.git';
         
         module("Basic Git FileSystem API Tests", {setup: testSetup, teardown:testTeardown});
         
@@ -213,14 +213,13 @@ $(document).ready(function(){
                 //         callback(repo, sha);
                 //     });
                 // });
-                GitLite.init(testDir, function(){
-                    GitLite.commit(testDir, callback);
+                GitLite.init({dir: testDir}, function(){
+                    GitLite.commit({dir:testDir, username: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, callback);
                 });
             });
         }
         
         asyncTest("Test Simple Git Commit", function(){
-        
             var cName = 'Ryan Ackley';
             var cEmail = 'ryanackley@gmail.com';
             var aName = 'Ryan Ackley';
@@ -355,7 +354,7 @@ $(document).ready(function(){
         }
         
         asyncTest("Test Clone", function(){
-            GitLite.clone(testDir, knownRepoUrl, function(){
+            GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){
                 verifyHead('refs/heads/master', function(){
                     ok(true, 'clone was successful');
                     start();
@@ -419,17 +418,24 @@ $(document).ready(function(){
         
         var resetRemote = function(url, initial, callback){
             
-            GitLite.clone(testDir, url, function(){
+            GitLite.clone({dir: testDir, url: url}, function(){
                 verifyHead('refs/heads/master', function(){
                     ok(true, 'clone was successful');
                     blowAwayWorkingDir(testDir, function(){
                         setupFileStructure(testDir, initial, function(){
-                            GitLite.commit(testDir, function(sha){
+                            GitLite.commit({dir: testDir, username: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(sha){
                                 ok(true, 'commit of new working dir was successful');
-                                GitLite.push(testDir, url, function(){
+                                GitLite.push({dir: testDir, url: url}, function(){
                                     ok(true, 'successfully pushed into url');
                                     callback();
                                 });
+                            }, function(e){
+                                if (e.type == 8){
+                                    callback();
+                                }
+                                else{
+                                    fail();
+                                }
                             });
                         });
                     });
@@ -449,7 +455,7 @@ $(document).ready(function(){
                 var dirEntry = fs.root;
                 dirEntry.getDirectory(root + 'testDir1', {create:true}, function(testDir){
                     //var repo = new Git.FileRepo(testDir);
-                    GitLite.clone(testDir, url, function(){
+                    GitLite.clone({dir: testDir, url: url}, function(){
                         callback(testDir);
                     });
                 });
@@ -460,7 +466,7 @@ $(document).ready(function(){
                 var dirEntry = fs.root;
                 dirEntry.getDirectory(root + 'testDir2', {create:true}, function(testDir){
                     //var repo = new Git.FileRepo(testDir);
-                    GitLite.clone(testDir, url, function(){
+                    GitLite.clone({dir: testDir, url: url}, function(){
                         callback(testDir);
                     });
                 });
@@ -470,8 +476,8 @@ $(document).ready(function(){
             
             createMirrorRepo(url, function(testDir){
                 fileutils.mkfile(testDir, '7.txt', '7\n8\n9', function(){
-                    GitLite.commit(testDir, function(sha){
-                        GitLite.push(testDir, url, function(){
+                    GitLite.commit({dir: testDir, username: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(sha){
+                        GitLite.push({dir: testDir, url: url}, function(){
                             callback();
                         });
                     });
@@ -482,17 +488,17 @@ $(document).ready(function(){
         
         var setupPullTest = function(initial, callback){
             //var repo = new Git.FileRepo(testDir);
-            GitLite.clone(testDir, knownRepoUrl, function(){
+            //GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){
                 resetRemote(knownRepoUrl, initial, function(){
                     callback();
                 });
-            });
+            //});
         }
         
         asyncTest("Test FF Pull simple", function(){
             setupPullTest(initial, function(){
                 pushFastForwardCommit(knownRepoUrl, function(){
-                    GitLite.pull(testDir, knownRepoUrl, function(){
+                    GitLite.pull({dir: testDir, url: knownRepoUrl}, function(){
                         fileutils.readFile(testDir, '7.txt', 'Text', function(data){
                             equal('7\n8\n9', data);
                             start();
@@ -532,9 +538,9 @@ $(document).ready(function(){
                 setupPullTest(initial, function(repo){
                     createMirrorRepo(knownRepoUrl, function(testDir1){
                         setupFileStructure(testDir1, ops, function(){
-                            GitLite.commit(testDir1, function(){
-                                GitLite.push(testDir1, knownRepoUrl, function(){
-                                    GitLite.pull(testDir, knownRepoUrl, function(){
+                            GitLite.commit({dir: testDir1, username: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(){
+                                GitLite.push({dir: testDir1, url: knownRepoUrl}, function(){
+                                    GitLite.pull({dir: testDir, url: knownRepoUrl}, function(){
                                         verifyHead('refs/heads/master', function(){
                                             ok(true);
                                             start();
@@ -553,9 +559,169 @@ $(document).ready(function(){
         fastForwardPullTest("Test FF Pull with a deleted folder", folderDelete);
         fastForwardPullTest("Test FF Pull with a deleted files", fileDelete);
         fastForwardPullTest("Test FF Pull with a changed file", fileChange);
-        // asyncTest("reload", function(){
-        //     window.location.reload();
-        // });
+    
+        module("Error condition tests", {setup: testSetup, teardown:testTeardown})
+        
+        asyncTest("File IO error", function(){
+            fileutils.mkfile(testDir, '.git', 'adasd', function(file){
+                // try to clone into a file
+                GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){ 
+                    fail("error should've been thrown");
+                    start();
+                },
+                function(e){
+                    equal(GitLite.FILE_IO_ERROR, e.type);
+                    start();
+                })
+            });
+        });
+
+        asyncTest("Ajax error", function(){
+            GitLite.clone({dir: testDir, url: "http://www.google.com"}, function(){
+                fail("error should've been thrown");
+                start();
+            },
+            function(e){
+                equal(GitLite.AJAX_ERROR, e.type);
+                start();
+            });
+        });
+
+        asyncTest("Clone directory not empty", function(){
+            fileutils.mkfile(testDir, 'test', 'adasd', function(file){
+                GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){ 
+                    fail("error should've been thrown");
+                    start();
+                },
+                function(e){
+                    equal(GitLite.CLONE_DIR_NOT_EMPTY, e.type);
+                    start();
+                })
+            });
+        });
+
+        asyncTest("Clone into existing git db", function(){
+            GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){ 
+                fileutils.ls(testDir, function(entries){
+                    entries.asyncEach(function(entry, done){
+                        if (entry.isFile){
+                            entry.remove(done, done);
+                        }
+                        else{
+                            entry.removeRecursively(done, done);
+                        }
+                    },
+                    function(){
+                        GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){ 
+                            fail("error should've been thrown");
+                            start();
+                        },
+                        function(e){
+                            equal(GitLite.CLONE_GIT_DIR_IN_USE, e.type);
+                            start();
+                        });
+                    });
+                })
+            });
+        });
+
+        asyncTest("Clone a non-existent branch", function(){
+            GitLite.clone({dir: testDir, url: knownRepoUrl, branch: "nonexistent"}, function(){
+                fail("error should've been thrown");
+                start();
+            },
+            function(e){
+                equal(GitLite.CLONE_BRANCH_NOT_FOUND, e.type);
+                start();
+            });
+        });
+
+        asyncTest("Non-fast-forward pull error", function(){
+            setupPullTest(initial, function(){
+                pushFastForwardCommit(knownRepoUrl, function(){
+                    setupFileStructure(testDir, folderMergeChange, function(){
+                        GitLite.commit({dir: testDir, username: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(){
+                            GitLite.pull({dir: testDir, url: knownRepoUrl}, function(){
+                                fail("error should've been thrown");
+                                start();
+                            },
+                            function(e){
+                                equal(GitLite.PULL_NON_FAST_FORWARD, e.type);
+                                start();
+                            });
+                        });
+                    });
+                });
+            });
+        });
+
+        asyncTest("Up to date pull", function(){
+            GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){
+                GitLite.pull({dir: testDir, url: knownRepoUrl}, function(){
+                    fail("error should've been thrown");
+                    start();
+                },
+                function(e){
+                    equal(GitLite.PULL_UP_TO_DATE, e.type);
+                    start();
+                });
+            });
+        });
+
+        asyncTest("No changes to commit", function(){
+            GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){
+                setupFileStructure(testDir, folderMergeChange, function(){
+                    GitLite.commit({dir: testDir, username: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(){
+                        GitLite.commit({dir: testDir, username: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(){
+                            fail("error should've been thrown");
+                            start();
+                        },
+                        function(e){
+                            equal(GitLite.COMMIT_NO_CHANGES, e.type);
+                            start();
+                        });
+                    });
+                });
+            });
+        });
+
+        asyncTest("No changes to push", function(){
+            GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){
+                setupFileStructure(testDir, folderMergeChange, function(){
+                    GitLite.commit({dir: testDir, username: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(){
+                        GitLite.push({dir: testDir, url: knownRepoUrl}, function(){
+                            GitLite.push({dir: testDir, url: knownRepoUrl}, function(){
+                                fail("error should've been thrown");
+                                start();
+                            },
+                            function(e){
+                                equal(GitLite.PUSH_NO_CHANGES, e.type);
+                                start();
+                            });
+                        });
+                    });
+                });
+            });
+        });
+
+        asyncTest("Non-fast-forward push error", function(){
+            setupPullTest(initial, function(){
+                pushFastForwardCommit(knownRepoUrl, function(){
+                    setupFileStructure(testDir, folderMergeChange, function(){
+                        GitLite.commit({dir: testDir, username: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(){
+                            GitLite.push({dir: testDir, url: knownRepoUrl}, function(){
+                                fail("error should've been thrown");
+                                start();
+                            },
+                            function(e){
+                                equal(GitLite.PUSH_NON_FAST_FORWARD, e.type);
+                                start();
+                            });
+                        });
+                    });
+                });
+            });
+        });
 
         module("Tree Merging Tests", {setup: testSetup, teardown:testTeardown});
 

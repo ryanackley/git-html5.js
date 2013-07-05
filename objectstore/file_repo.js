@@ -1,4 +1,5 @@
-define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc_utils', 'utils/file_utils'], function(Pack, PackIndex, GitObjects, utils, fileutils){
+define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc_utils', 'utils/file_utils', 'utils/errors'], function(Pack, PackIndex, GitObjects, utils, fileutils, errutils){
+
 
 	var FileObjectStore = function(rootDir) {
 	 	this.dir = rootDir;
@@ -12,6 +13,8 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 		load : function(callback){
 			var rootDir = this.dir;
 			var thiz = this;
+			var fe = this.fileError;
+
 			rootDir.getDirectory('.git/objects', {create:true}, function(objectsDir){
 				thiz.objectsDir = objectsDir;
 				objectsDir.getDirectory('pack', {create:true}, function(packDir){
@@ -38,19 +41,19 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 												if (counter.x == packEntries.length){
 													callback();
 												}
-											});
-										});
+											}, fe);
+										}, fe);
 									});
 								}
 								else{
 									callback();
 								}
 							}
-						});
+						}, fe);
 					}
 					readEntries();
-				});
-			});
+				}, fe);
+			}, fe);
 		},
 		loadWith : function(objectsDir, packs){
 			this.objectsDir = objectsDir;
@@ -71,6 +74,7 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 					else{
 						seen[sha] = true;
 					}
+					// it's possible for this to fail since we support shallow clones
 					thiz._retrieveObject(sha, 'Commit', function(obj){
 						nextLevel = nextLevel.concat(obj.parents);
 						var i = commits.length - 1
@@ -84,7 +88,7 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 							commits.unshift(obj);
 						}
 						callback();
-					});
+					}, callback);
 				}, function(){
 					if (commits.length >= limit || nextLevel.length == 0){
 						/*var shas = [];
@@ -102,110 +106,88 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 		},
 		_getCommitsForPush : function(baseRefs, callback, error){
 			
-			var thiz = this;
-			var allCommits ={};
-			
-			// special case of empty remote. We don't support local branching so push master only
+			// special case of empty remote. 
 			if (baseRefs.length == 1 && baseRefs[0].sha == "0000000000000000000000000000000000000000"){
 				baseRefs[0].name = 'refs/heads/master';
 			}
-			
-			// does a breadth first search of the commit graph to find commits to push. The levels are ordered by 
-			// descendents first and the nodes on each level are ordered by commit date. 
-			baseRefs.asyncEach(function(ref, callback){
-				thiz._getHeadForRef(ref.name, function(sha){
-					if (sha != ref.sha){
-						ref.head = sha;
-						var tips = [], seen = {};
-						
-						var pushCommit = function(sha, ignore, callback){
-							thiz._retrieveObject(sha, 'Commit', function(commit, rawObj){
-								var i = 0,commitObj = {commit: commit, raw: rawObj};
-								seen[sha] = commitObj;
-								commit.ignore = ignore;
-									
-								for (;i < tips.length; i++){
-									if (commit.author.timestamp >= tips[i].commit.author.timestamp){
-										tips.splice(i, 0, commitObj);
-										break;
-									}
-								}
-								
-								if (i == tips.length){
-									tips.push(commitObj);
-								}
-								callback();
-							});
-						}
-						
-						var searchLevel = function(shas, ignore, callback){
-							shas.asyncEach(function(sha, callback){
-								if (sha == "0000000000000000000000000000000000000000"){
-									callback();
-									return;
-								}
-								var commitObj = seen[sha];
-								if (!commitObj)
-									pushCommit(sha, ignore || sha == ref.sha, callback);
-								else{
-									var commit = commitObj.commit;
-									if (ignore && !commit.ignore){
-										commit.ignore = true;
-										var parents = commit.parents;
-										while (parents.length != 0){
-											var pObj = seen[parents.pop()];
-											if (pObj){
-												var p = pObj.commit;
-												if (ignore && !p.ignore){
-													p.ignore = true;
-												}
-												parents = parents.concat(p.parents);
-											}
-										}
-									}
-									callback();
-								}
-							}, function(){
-								var keepGoing = false;
-								for (var i = 0; i < tips.length; i++){
-									if (!tips[i].commit.ignore){
-										keepGoing = true;
-										break;
-									}
-								}
-								if (keepGoing){
-									var latest = tips.shift();
-									searchLevel(latest.commit.parents, latest.commit.ignore, callback);
-								}
-								else{
-									callback();
-								}
-							});
-						}
-						
-						searchLevel([sha, ref.sha], false, function(){
-							var wants = [];
-							
-							var recurseFill = function(sha){
-								var next = seen[sha];
-								if (next && !next.commit.ignore){
-									wants.push(next);
-									for (var i = 0; i < next.commit.parents.length; i++){
-										recurseFill(next.commit.parents[i]);
-									}
-								}
-							}
-							recurseFill(sha);
-							allCommits[ref.name] = wants;
-							callback();
-						});
+
+			var self = this;
+			// find the remote branch corresponding to our local one.
+			var remoteRef, headRef;
+			this.getHeadRef(function(refName){
+				headRef = refName;
+				for (var i = 0; i < baseRefs.length; i++){
+					if (baseRefs[i].name == headRef){
+						remoteRef = baseRefs[i];
+						break;
 					}
-				}, callback);
-			},
-			function(){
-				callback(allCommits);
+				}
+
+				// Didn't find a remote branch for our local so make a dummy
+				if (!remoteRef){
+					remoteRef = {
+						sha: "0000000000000000000000000000000000000000",
+						name: headRef
+					}
+				}
+				
+				var nonFastForward = function(){
+					error({type: errutils.PUSH_NON_FAST_FORWARD, msg: errutils.PUSH_NON_FAST_FORWARD_MSG});
+				}
+
+				var checkRemoteHead = function(success){
+					// See if the remote head exists in our repo.  
+					if (remoteRef.sha != "0000000000000000000000000000000000000000"){
+						self._retrieveObject(remoteRef.sha, 'Commit', success, nonFastForward);
+					}	
+					else{
+						success();
+					}
+				} 
+
+
+				checkRemoteHead(function(){
+					self._getHeadForRef(headRef, function(sha){
+
+						if (sha == remoteRef.sha){
+							error({type: errutils.PUSH_NO_CHANGES, msg: errutils.PUSH_NO_CHANGES_MSG});
+							return;
+						}
+
+						remoteRef.head = sha;
+						// we don't support local merge commits so finding commits to push should be a 
+						// matter of looking at a non-branching list of ancestors of the current commit.
+						var commits = [];
+						var getNextCommit = function(sha){
+							self._retrieveObject(sha, 'Commit', function(commit, rawObj){
+								commits.push({commit: commit, raw: rawObj});
+								if (commit.parents.length > 1){
+									// this would mean a local merge commit. It shouldn't happen, 
+									// therefore we've strayed into somewhere we shouldn't be.
+									nonFastForward();
+								}
+								else if (commit.parents.length == 0 || commit.parents[0] == remoteRef.sha){
+									callback(commits, remoteRef);
+								}
+								else{
+									getNextCommit(commit.parents[0]);
+								}
+							}, nonFastForward);
+						}
+						getNextCommit(sha);
+					});
+				});
+
 			});
 			
+		},
+
+		getHeadRef : function(callback){
+			fileutils.readFile(this.dir, '.git/HEAD', 'Text', function(headStr){
+				// get rid of the initial 'ref: ' plus newline at end
+            	var headRefName = headStr.substring(5).trim();
+            	callback(headRefName);
+			},this.fileError);
 		},
 		_getHeadForRef : function(name, callback, onerror){
 			fileutils.readFile(this.dir, '.git/' + name, 'Text', function(data){callback(data.substring(0, 40));}, onerror) ;	
@@ -294,7 +276,7 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 				callback(objects);
 			});
 		},
-		_retrieveObject : function(sha, objType, callback){
+		_retrieveObject : function(sha, objType, callback, error){
 			 var dataType = "ArrayBuffer";
 			 if (objType == "Commit"){
 			 	dataType = "Text";
@@ -302,26 +284,35 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 			 
 			 this._retrieveRawObject(sha, dataType, function(object){
 			 	callback(new GitObjects[objType](sha, object.data), object);
-			 });
+			 }, error);
 		},
-		init : function(success){
+
+		init : function(success, error){
 			var root = this.dir;
 			var self = this;
+			this.error = error;
+			this.fileError = errutils.fileErrorFunc(error);
 			
 			root.getDirectory('.git', {create:false}, function(gitDir){
 				self.load(success);
 			},
 			function(e){
-				self._init(success);
+				if (e.code == FileError.NOT_FOUND_ERR){
+					self._init(success);
+				}
+				else{
+					self.fileError(e);
+				}
 			});
 		},
+
 		_init : function(success){
 			var root = this.dir;
 			var self = this;
 			fileutils.mkdirs(root, '.git/objects', function(objectsDir){
 				self.objectsDir = objectsDir;
-				fileutils.mkfile(root, '.git/HEAD', 'ref: refs/heads/master\n', success);
-			});
+				fileutils.mkfile(root, '.git/HEAD', 'ref: refs/heads/master\n', success, self.fileError);
+			}, this.fileError);
 
 		},
 		

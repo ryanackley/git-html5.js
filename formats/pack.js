@@ -444,7 +444,7 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils'], function(a
     this.getObjectAtOffset = getObjectAtOffset
   }
 
-  Pack.buildPack = function(heads, repo, callback){
+  Pack.buildPack = function(commits, repo, callback){
   	var visited = {};
   	var counter = {x:0, numObjects:0};
   	var packed = [];//new BlobBuilder();
@@ -589,20 +589,19 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils'], function(a
   		});
   	}
   	
-  	for (var name in heads){
-  	    var commits = heads[name];
-  	   	commits.forEach(function(commitObj){
-  			//repo._retrieveObject(commitShas[i], 'Commit', function(commit, rawObj){
-  			var commit = commitObj.commit;
-  			walkTree(commit.tree, function(){
-  				packIt(commitObj.raw);
-  				if (++counter.x == commits.length){
-  					finishPack();
-  				}
-  			});
-  			//});
+  	
+   	commits.forEach(function(commitObj){
+  		//repo._retrieveObject(commitShas[i], 'Commit', function(commit, rawObj){
+  		var commit = commitObj.commit;
+      packIt(commitObj.raw);
+  		walkTree(commit.tree, function(){
+  			if (++counter.x == commits.length){
+  				finishPack();
+  			}
   		});
-  	}
+		//});
+    });
+  	
   }
   return Pack;
 });
