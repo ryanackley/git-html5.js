@@ -1,8 +1,7 @@
 define(['formats/smart_http_remote', 'formats/pack'], function(SmartHttpRemote, Pack){
     var push = function(options, success, error){
         
-        var store = options.objectStore,
-            dir = options.dir;
+        var store = options.objectStore;
 
         store.getConfig(function(config){
             var url = config.url || options.url;

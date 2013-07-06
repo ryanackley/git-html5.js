@@ -3,10 +3,9 @@ define(['utils/file_utils'], function(fileutils){
     var expandBlob = function(dir, store, name, blobSha, callback){
         var makeFileFactory = function(name){
             return function(blob){
-                fileutils.mkfile(dir, name, blob.data, callback);
+                fileutils.mkfile(dir, name, blob.data, callback, function(e){console.log(e)});
             }
         }
-        
         store._retrieveObject(blobSha, "Blob", makeFileFactory(name));
     }
 

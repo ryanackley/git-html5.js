@@ -240,7 +240,7 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 			 }, function(e){
 			 		thiz._findPackedObject(shaBytes, function(offset, pack){
 			 			dataType = dataType == 'Raw' ? 'ArrayBuffer' : dataType;
-			 			pack.matchObjectAtOffset(offset, dataType, function(object){
+			 			pack.matchAndExpandObjectAtOffset(offset, dataType, function(object){
 							callback(object);
 						});
 			 	}, function(){

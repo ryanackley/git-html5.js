@@ -13,7 +13,7 @@ define(['formats/upload_pack_parser', 'utils/errors'], function(UploadPackParser
                 "refs": []
             }
             for (i = 1; i < lines.length - 1; i++) {
-                thisLine = lines[i]
+                var thisLine = lines[i]
                 if (i == 1) {
                     var bits = thisLine.split("\0")
                     result["capabilities"] = bits[1]
