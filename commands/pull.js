@@ -134,7 +134,7 @@ define(['commands/treemerger', 'commands/object2file', 'formats/smart_http_remot
                                     branchRef.localHead = sha;
                                     
                                     store._getCommitGraph([sha], 32, function(commits, nextLevel){
-                                        remote.fetchRef([wantRef], commits, nextLevel, function(objects, packData, common){
+                                        remote.fetchRef([wantRef], commits, null, nextLevel, function(objects, packData, common){
                                             // fast forward merge
                                             if (common.indexOf(wantRef.localHead) != -1){
                                                 var packSha = packData.subarray(packData.length - 20);

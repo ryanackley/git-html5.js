@@ -75,7 +75,7 @@ define(['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index
 
                     mkfile(gitDir, "HEAD", 'ref: ' + localHeadRef.name + '\n', function(){
                         mkfile(gitDir, localHeadRef.name, localHeadRef.sha + '\n', function(){
-                            remote.fetchRef([localHeadRef], null, null, function(objects, packData){
+                            remote.fetchRef([localHeadRef], null, depth, null, function(objects, packData){
                                 var packSha = packData.subarray(packData.length - 20);
                                 
                                 var packIdxData = PackIndex.writePackIdx(objects, packSha);

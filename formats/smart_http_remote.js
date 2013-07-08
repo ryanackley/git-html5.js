@@ -33,15 +33,17 @@ define(['formats/upload_pack_parser', 'utils/errors'], function(UploadPackParser
             return result
         }
 
-        var pushRequest = function(refPaths, packData) {
-            var padWithZeros = function(num) {
-                var hex = num.toString(16);
-                var pad = 4 - hex.length;
-                for (x = 0; x < pad; x++) {
-                    hex = '0' + hex;
-                }
-                return hex;
+        var padWithZeros = function(num) {
+            var hex = num.toString(16);
+            var pad = 4 - hex.length;
+            for (var x = 0; x < pad; x++) {
+                hex = '0' + hex;
             }
+            return hex;
+        }
+
+        var pushRequest = function(refPaths, packData) {
+            
 
             var pktLine = function(refPath) {
                 return refPath.sha + ' ' + refPath.head + ' ' + refPath.name;
@@ -63,13 +65,13 @@ define(['formats/upload_pack_parser', 'utils/errors'], function(UploadPackParser
 
         }
 
-        var refWantRequest = function(wantRefs, haveRefs, moreHaves) {
+        var refWantRequest = function(wantRefs, haveRefs, depth, moreHaves) {
             var str = "0067want " + wantRefs[0].sha + " multi_ack_detailed side-band-64k thin-pack ofs-delta\n"
             for (var i = 1; i < wantRefs.length; i++) {
                 str += "0032want " + wantRefs[i].sha + "\n"
             }
-            str += "0000"
             if (haveRefs && haveRefs.length) {
+                str += "0000"
                 _(haveRefs).each(function(haveRef) {
                     str += "0032have " + haveRef.sha + "\n"
                 });
@@ -80,6 +82,11 @@ define(['formats/upload_pack_parser', 'utils/errors'], function(UploadPackParser
                 }
 
             } else {
+                if (depth){
+                    var depthStr = "deepen " + depth;
+                    str += (padWithZeros(depthStr.length + 4) + depthStr);
+                }
+                str += "0000"
                 str += "0009done\n"
             }
             return str
@@ -134,9 +141,9 @@ define(['formats/upload_pack_parser', 'utils/errors'], function(UploadPackParser
             }).fail(ajaxErrorHandler);
         }
 
-        this.fetchRef = function(wantRefs, haveRefs, moreHaves, callback, noCommon) {
+        this.fetchRef = function(wantRefs, haveRefs, depth, moreHaves, callback, noCommon, progress) {
             var url = this.makeUri('/git-upload-pack')
-            var body = refWantRequest(wantRefs, haveRefs)
+            var body = refWantRequest(wantRefs, haveRefs, depth);
             var thisRemote = this
             var xhr = new XMLHttpRequest();
             xhr.open("POST", url, true);
@@ -148,18 +155,33 @@ define(['formats/upload_pack_parser', 'utils/errors'], function(UploadPackParser
                 if (haveRefs && String.fromCharCode.apply(null, new Uint8Array(binaryData, 4, 3)) == "NAK") {
                     if (moreHaves) {
                         thisRemote.store._getCommitGraph(moreHaves, 32, function(commits, next) {
-                            thisRemote.fetchRef(wantRefs, commits, next, callback);
+                            thisRemote.fetchRef(wantRefs, commits, depth, next, callback, noCommon);
                         });
                     }
                     else if (noCommon){
                         noCommon();
                     }
                 } else {
-                    UploadPackParser.parse(binaryData, store, function(objects, packData, common) {
-                        if (callback) {
-                            callback(objects, packData, common);
+                    // UploadPackParser.parse(binaryData, store, function(objects, packData, common) {
+                    //     if (callback) {
+                    //         callback(objects, packData, common);
+                    //     }
+                    // });
+                    var packWorker = new Worker("pack_worker.js");
+                    packWorker.onmessage = function(evt){
+                        var msg = evt.data;
+                        if (msg.type == GitLiteWorkerMessages.FINISHED && callback){
+                            packWorker.terminate();
+                            callback(msg.objects, new Uint8Array(msg.data), msg.common);
                         }
-                    });
+                        else if (msg.type == GitLiteWorkerMessages.RETRIEVE_OBJECT){
+                            store._retrieveRawObject(msg.sha, "ArrayBuffer", function(baseObject){
+                                packWorker.postMessage({type: GitLiteWorkerMessages.OBJECT_RETRIEVED, id: msg.id, object: baseObject}, [baseObject.data]);
+                                var x = 0;
+                            });
+                        }
+                    }
+                    packWorker.postMessage({type: GitLiteWorkerMessages.START, data:binaryData}, [binaryData]);
                 }
             }
 

@@ -4,7 +4,7 @@
 //     }
 // });
 
-define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', 'commands/push', 'objectstore/file_repo', 'utils/errors', 'thirdparty/2.2.0-sha1', 'thirdparty/crc32', 'thirdparty/deflate.min', 'thirdparty/inflate.min'], function(clone, commit, init, pull, push, FileObjectStore, errutils){
+define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', 'commands/push', 'objectstore/file_repo', 'utils/errors', 'thirdparty/2.2.0-sha1', 'thirdparty/crc32', 'thirdparty/deflate.min', 'thirdparty/inflate.min', "worker_messages.js"], function(clone, commit, init, pull, push, FileObjectStore, errutils){
     
     var api = {
 
@@ -42,7 +42,7 @@ define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', '
             var objectStore = new FileObjectStore(options.dir);
             objectStore.init(function(){
                 //clone(dir, objectStore, url, callback);
-                clone({dir: options.dir, branch: options.branch, objectStore: objectStore, url: options.url}, success, error);
+                clone({dir: options.dir, branch: options.branch, objectStore: objectStore, url: options.url, depth: options.depth}, success, error);
             }, error);
         },
         pull : function(options, success, error){

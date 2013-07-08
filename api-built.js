@@ -871,20 +871,6 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
             return num;
         }
 
-        // var objectSizeInfosToSize = function(sizeInfos) {
-        //     var current = 0,
-        //         currentShift = 0,
-        //         i,
-        //         sizeInfo;
-
-        //     for (i = 0; i < sizeInfos.length; i++) {
-        //         sizeInfo = sizeInfos[i]
-        //         current += (parseInt(sizeInfo, 2) << currentShift)
-        //         currentShift += sizeInfo.length
-        //     }
-        //     return current
-        // }
-
         var PackedTypes = {
             COMMIT: 1,
             TREE: 2,
@@ -897,23 +883,6 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
         var getTypeStr = function(type) {
             return typeArray[type];
         }
-
-        // var packTypeSizeBits = function(type, size) {
-        //     var typeBits = map[type];
-        //     var shifter = size;
-        //     var bytes = [];
-        //     var idx = 0;
-
-        //     bytes[idx] = typeBits << 4 | (shifter & 0xf);
-        //     shifter = shifter >>> 4;
-
-        //     while (shifter != 0) {
-        //         bytes[idx] = bytes[idx] | 0x80;
-        //         bytes[++idx] = shifter & 0x7f;
-        //         shifter = shifter >>> 7;
-        //     }
-        //     return new Uint8Array(bytes);
-        // }
 
         var matchObjectHeader = function() {
             var objectStartOffset = offset;
@@ -936,68 +905,8 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
                 type: type,
                 offset: objectStartOffset
             }
-            // var sizeInfos = []
-            // var hintTypeAndSize = peek(1)[0].toString(2).rjust(8, "0")
-            // var typeStr = hintTypeAndSize.slice(1, 4)
-            // var needMore = (hintTypeAndSize[0] == "1")
-            // var hintAndSize = null
-            // var objectStartOffset = offset
-
-            // sizeInfos.push(hintTypeAndSize.slice(4, 8))
-            // advance(1)
-
-            // while (needMore) {
-            //     hintAndSize = peek(1)[0].toString(2).rjust(8, "0")
-            //     needMore = (hintAndSize[0] == "1")
-            //     sizeInfos.push(hintAndSize.slice(1))
-            //     advance(1)
-            // }
-            // return {
-            //     size: objectSizeInfosToSize(sizeInfos),
-            //     type: getType(typeStr),
-            //     offset: objectStartOffset
-            // }
+           
         }
-
-
-        // var intToBytes = function(val, atLeast) {
-        //     var bytes = []
-        //     var current = val
-        //     while (current > 0) {
-        //         bytes.push(current % 256)
-        //         current = Math.floor(current / 256)
-        //     }
-        //     while (atLeast && bytes.length < atLeast) {
-        //         bytes.push(0)
-        //     }
-        //     return bytes.reverse()
-        // }
-
-        // var matchBytes = function(bytes) {
-        //     var i
-        //     var nextByte
-        //     for (i = 0; i < bytes.length; i++) {
-        //         nextByte = peek(1)[0]
-        //         if (nextByte !== bytes[i]) {
-        //             throw (Error("adler32 checksum didn't match"))
-        //         }
-        //         advance(1)
-        //     }
-        // }
-
-        // var advanceToBytes = function(bytes) {
-        //     var nextByte
-        //     var matchedByteCount = 0
-        //     while (matchedByteCount < bytes.length) {
-        //         nextByte = peek(1)[0]
-        //         if (nextByte == bytes[matchedByteCount]) {
-        //             matchedByteCount++
-        //         } else {
-        //             matchedByteCount = 0
-        //         }
-        //         advance(1)
-        //     }
-        // }
 
         var objectHash = function(type, content) {
             var contentData = new Uint8Array(content);
@@ -1041,61 +950,7 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
             return desiredOffset;
         }
 
-        // var matchOffsetDeltaObject = function(header, dataType, success) {
-
-
-        //     //var baseObject = getObjectAtOffset(desiredOffset)
-
-        //     var expandDelta = function(baseData, baseObject) {
-        //         var dataOffset = offset;
-        //         uncompressObject(dataOffset, "ArrayBuffer", function(buf, compressedLength) {
-
-        //             //var checksum = adler32(buf)
-        //             advance(compressedLength)
-
-        //             //matchBytes(intToBytes(checksum, 4))
-
-
-        //             var object = {
-        //                 type: header.type,
-        //                 //dataOffset: dataOffset,
-        //                 //crc: crc32.crc(data.subarray(header.offset, offset)),
-        //                 //desiredOffset: desiredOffset,
-        //                 offset: header.offset
-        //                 //chain:[]
-        //             }
-        //             object.data = applyDelta(new Uint8Array(baseData), new Uint8Array(buf));
-        //             object.type = baseObject.type
-        //             delete object.desiredOffset
-
-        //             object.sha = objectHash(object.type, object.data)
-        //             //var buf = reader.result;
-        //             // expandOffsetDelta(baseObject, deltaObject, new Uint8Array(baseData), new Uint8Array(buf), dataType, function(expandedData) {
-        //             //     success(deltaObject, offset);
-        //             // });
-        //         });
-        //     }
-
-        //     if (header.type == "ofs_delta") {
-        //         var desiredOffset = findDeltaBaseOffset(header);
-        //         var oldOffset = offset;
-        //         matchObjectAtOffset(desiredOffset, "ArrayBuffer", function(baseObject) {
-        //             offset = oldOffset;
-        //             expandDelta(baseObject.data, baseObject);
-        //         });
-        //     } else {
-        //         var shaBytes = peek(20)
-        //         advance(20)
-        //         var sha = _(shaBytes).map(function(b) {
-        //             return b.toString(16).rjust(2, "0")
-        //         }).join("")
-
-        //         store._retrieveRawObject(sha, 'ArrayBuffer', function(baseObject) {
-        //             baseObject.sha = sha;
-        //             expandDelta(baseObject.data, baseObject);
-        //         });
-        //     }
-        // }
+        
         var expandDeltifiedObject = function(object, callback) {
 
             var doExpand = function(baseObject, deltaObject) {
@@ -1230,24 +1085,9 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
             })
         }
 
-        // var expandOffsetDelta = function(baseObject, object, baseObjectData, objectData, dataType, callback) {
-
-        //     applyDelta(baseObjectData, objectData, dataType, function(expandedData) {
-        //         object.type = baseObject.type
-        //         delete object.desiredOffset
-        //         object.data = expandedData
-
-        //         if (dataType == 'ArrayBuffer')
-        //             object.sha = objectHash(object.type, object.data)
-
-        //         callback(expandedData);
-        //     });
-
-        // }
-
         this.matchObjectAtOffset = matchObjectAtOffset;
 
-        this.parseAll = function(success) {
+        this.parseAll = function(success, progress) {
             try {
                 var numObjects;
                 var i;
@@ -1258,7 +1098,16 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
                 matchPrefix()
                 matchVersion(2)
                 numObjects = matchNumberOfObjects();
-                console.log("unpacking " + numObjects + " objects" );
+
+                if (progress){
+                    var tracker = 0;
+                    var trackProgress = function(){
+                        progress({at: ++tracker, total: numObjects});
+                    }
+                }
+                else{
+                    var trackProgress = function(){};
+                }
                 for (i = 0; i < numObjects; i++) {
                     var object = matchObjectAtOffset(offset);
 
@@ -1275,49 +1124,23 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
                         default:
                             object.sha = objectHash(object.type, object.data);
                             delete object.data;
+                            trackProgress();
                             break;
                     }
                     objects.push(object);
-                    if ((i % 1000) == 0){
-                        console.log('unpacked ' + i);
-                    }
                 }
 
-                console.log('unpacking ' + deferredObjects.length + " deferred objects");
-                var complete = 0;
                 deferredObjects.asyncEach(function(obj, done) {
-                    expandDeltifiedObject(obj, function(){
-                        complete++;
-                        if ((complete % 1000) == 0){
-                            console.log('unpacked ' + complete + ' deferred objects');
-                        }
+                    expandDeltifiedObject(obj, function(obj){
+                        delete obj.data;
+                        trackProgress();
                         done();
                     });
                 },
                     success);
 
-                // var findNextOrQuit = function(object, nextOffset) {
-                //     object.crc = crc32.crc(data.subarray(object.offset, nextOffset));
-                //     object.sha = objectHash(object.type, object.data);
-                //     delete object.data;
-                //     objects.push(object);
-
-                //     progressCounter.objectCount++;
-                //     if (numObjects == progressCounter.objectCount) {
-                //         //write out pack file
-                //         success();
-
-                //     } else {
-                //         matchObjectAtOffset(nextOffset, 'ArrayBuffer', findNextOrQuit);
-                //     }
-                // }
-
-                // //for (i = 0; i < numObjects; i++) {
-                // matchObjectAtOffset(offset, 'ArrayBuffer', findNextOrQuit);
-                //}
-
             } catch (e) {
-                console.log("Error caught in pack file parsing data") // + Git.stringToBytes(data.getRawData()))
+                //console.log("Error caught in pack file parsing data") // + Git.stringToBytes(data.getRawData()))
                 throw (e)
             }
             return this
@@ -1484,108 +1307,99 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
     }
     return Pack;
 });
+define('formats/upload_pack_parser',['formats/pack', 'utils/misc_utils'], function(Pack, utils) {
+    var parse = function(arraybuffer, repo, success, progress) {
+        var data = new Uint8Array(arraybuffer); //new BinaryFile(binaryString);
+        var offset = 0;
+        var remoteLines = null;
+        var objects = null;
 
-define('formats/upload_pack_parser',['formats/pack', 'utils/misc_utils'], function(Pack, utils){
-  var parse = function(arraybuffer, repo, success) {
-    var data   = new Uint8Array(arraybuffer);//new BinaryFile(binaryString);
-    var offset = 0;
-    var remoteLines = null;
-    var objects = null;
-    
-    var peek = function(length) {
-      return Array.prototype.slice.call(data, offset, offset + length);
-    };
-    
-    var advance = function(length) {
-      offset += length;
-    };
-    
-    // A pkt-line is defined in http://git-scm.com/gitserver.txt
-    var nextPktLine = function() {
-      var pktLine = null;
-      var length;
-      length = parseInt(utils.bytesToString(peek(4)), 16);
-      advance(4);
-      if (length == 0) {
-      //   return nextPktLine()
-      } else {
-        pktLine = peek(length - 4);
-        advance(length - 4);
-      }
-      return pktLine;
-    };
+        var peek = function(length) {
+            return Array.prototype.slice.call(data, offset, offset + length);
+        };
 
-    console.log("Parsing upload pack of  " + arraybuffer.byteLength + " bytes")
-    var startTime = new Date()
-    var pktLine = nextPktLine()
-    var packFileParser
-    var remoteLine = ""
-    var packData = ""
-    var gotAckOrNak = false
-    var ackRegex = /ACK ([0-9a-fA-F]{40}) common/;
-    var common = [];
-    
-    var pktLineStr = utils.bytesToString(pktLine);
-    while (pktLineStr.slice(0, 7) === "shallow") {
-      pktLine = nextPktLine()
-    }
-    
-    while (pktLineStr === "NAK\n" || 
+        var advance = function(length) {
+            offset += length;
+        };
+
+        // A pkt-line is defined in http://git-scm.com/gitserver.txt
+        var nextPktLine = function(isShallow) {
+            var pktLine = null;
+            var length;
+            length = parseInt(utils.bytesToString(peek(4)), 16);
+            advance(4);
+            if (length == 0) {
+                if (isShallow) {
+                    return nextPktLine()
+                }
+            } else {
+                pktLine = peek(length - 4);
+                advance(length - 4);
+            }
+            return pktLine;
+        };
+
+        //console.log("Parsing upload pack of  " + arraybuffer.byteLength + " bytes")
+        var startTime = new Date()
+        var pktLine = nextPktLine()
+        var packFileParser
+        var remoteLine = ""
+        var packData = ""
+        var gotAckOrNak = false
+        var ackRegex = /ACK ([0-9a-fA-F]{40}) common/;
+        var common = [];
+
+        var pktLineStr = utils.bytesToString(pktLine);
+        while (pktLineStr.slice(0, 7) === "shallow") {
+            pktLine = nextPktLine(true);
+            pktLineStr = utils.bytesToString(pktLine);
+        }
+
+        while (pktLineStr === "NAK\n" ||
             pktLineStr.slice(0, 3) === "ACK") {
-      var matches = ackRegex.exec(pktLineStr);
-      if (matches){
-      	common.push(matches[1]);
-      }
-      pktLine = nextPktLine();
-      pktLineStr = utils.bytesToString(pktLine);
-      gotAckOrNak = true;
-    }
-    
-    if (!gotAckOrNak) {
-      throw(Error("got neither ACK nor NAK in upload pack response"))
-    }
-    
-    while (pktLine !== null) {
-      // sideband format. "2" indicates progress messages, "1" pack data
-      if (pktLine[0] == 2) {
-        var lineString = utils.bytesToString(pktLine)
-        lineString = lineString.slice(1, lineString.length)
-        remoteLine += lineString
-      }
-      else if (pktLine[0] == 1) {
-        packData += utils.bytesToString(pktLine.slice(1))
-      }
-      else if (pktLine[0] == 3) {
-        throw(Error("fatal error in packet line"))
-      }
-      pktLine = nextPktLine()
-    }
-    
-    packFileParser = new Pack(packData, repo)
-    packData = null;
-    data = null;
-    binaryString = null;
-    packFileParser.parseAll(function(){
-    	objects = packFileParser.getObjects()
-          
-		/*remoteLines = []
-		var newLineLines = remoteLine.split("\n")
-		for (var i = 0; i < newLineLines.length; i++) {
-		  var crLines = newLineLines[i].split("\r")
-		  var newRemoteLine = crLines[crLines.length - 1]
-		  if (newRemoteLine !== "") {
-			remoteLines.push(newRemoteLine)
-		  }
-		}*/
-		console.log("took " + (new Date().getTime() - startTime.getTime()) + "ms")
-		success(objects, packFileParser.getData(), common);
-    });
-    
-  };
-  return {parse : parse};
+            var matches = ackRegex.exec(pktLineStr);
+            if (matches) {
+                common.push(matches[1]);
+            }
+            pktLine = nextPktLine();
+            pktLineStr = utils.bytesToString(pktLine);
+            gotAckOrNak = true;
+        }
+
+        if (!gotAckOrNak) {
+            throw (Error("got neither ACK nor NAK in upload pack response"))
+        }
+
+        while (pktLine !== null) {
+            // sideband format. "2" indicates progress messages, "1" pack data
+            if (pktLine[0] == 2) {
+                var lineString = utils.bytesToString(pktLine)
+                lineString = lineString.slice(1, lineString.length)
+                remoteLine += lineString
+            } else if (pktLine[0] == 1) {
+                packData += utils.bytesToString(pktLine.slice(1))
+            } else if (pktLine[0] == 3) {
+                throw (Error("fatal error in packet line"))
+            }
+            pktLine = nextPktLine()
+        }
+
+        packFileParser = new Pack(packData, repo)
+        packData = null;
+        data = null;
+        binaryString = null;
+        packFileParser.parseAll(function() {
+            objects = packFileParser.getObjects()
+
+           // console.log("took " + (new Date().getTime() - startTime.getTime()) + "ms")
+            success(objects, packFileParser.getData(), common);
+        }, progress);
+
+    };
+    return {
+        parse: parse
+    };
 });
-
-
 define('utils/errors',[],function() {
 
     var errors = {
@@ -1706,7 +1520,7 @@ define('utils/errors',[],function() {
     return errors;
 
 });
-define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors'], function(UploadPackParser, errutils) {
+define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors', 'module'], function(UploadPackParser, errutils, self) {
     var SmartHttpRemote = function(store, name, repoUrl, error) {
         this.store = store;
         this.name = name;
@@ -1741,15 +1555,17 @@ define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors'
             return result
         }
 
-        var pushRequest = function(refPaths, packData) {
-            var padWithZeros = function(num) {
-                var hex = num.toString(16);
-                var pad = 4 - hex.length;
-                for (x = 0; x < pad; x++) {
-                    hex = '0' + hex;
-                }
-                return hex;
+        var padWithZeros = function(num) {
+            var hex = num.toString(16);
+            var pad = 4 - hex.length;
+            for (var x = 0; x < pad; x++) {
+                hex = '0' + hex;
             }
+            return hex;
+        }
+
+        var pushRequest = function(refPaths, packData) {
+            
 
             var pktLine = function(refPath) {
                 return refPath.sha + ' ' + refPath.head + ' ' + refPath.name;
@@ -1771,13 +1587,13 @@ define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors'
 
         }
 
-        var refWantRequest = function(wantRefs, haveRefs, moreHaves) {
+        var refWantRequest = function(wantRefs, haveRefs, depth, moreHaves) {
             var str = "0067want " + wantRefs[0].sha + " multi_ack_detailed side-band-64k thin-pack ofs-delta\n"
             for (var i = 1; i < wantRefs.length; i++) {
                 str += "0032want " + wantRefs[i].sha + "\n"
             }
-            str += "0000"
             if (haveRefs && haveRefs.length) {
+                str += "0000"
                 _(haveRefs).each(function(haveRef) {
                     str += "0032have " + haveRef.sha + "\n"
                 });
@@ -1788,6 +1604,11 @@ define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors'
                 }
 
             } else {
+                if (depth){
+                    var depthStr = "deepen " + depth;
+                    str += (padWithZeros(depthStr.length + 4) + depthStr);
+                }
+                str += "0000"
                 str += "0009done\n"
             }
             return str
@@ -1842,9 +1663,9 @@ define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors'
             }).fail(ajaxErrorHandler);
         }
 
-        this.fetchRef = function(wantRefs, haveRefs, moreHaves, callback, noCommon) {
+        this.fetchRef = function(wantRefs, haveRefs, depth, moreHaves, callback, noCommon, progress) {
             var url = this.makeUri('/git-upload-pack')
-            var body = refWantRequest(wantRefs, haveRefs)
+            var body = refWantRequest(wantRefs, haveRefs, depth);
             var thisRemote = this
             var xhr = new XMLHttpRequest();
             xhr.open("POST", url, true);
@@ -1856,18 +1677,42 @@ define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors'
                 if (haveRefs && String.fromCharCode.apply(null, new Uint8Array(binaryData, 4, 3)) == "NAK") {
                     if (moreHaves) {
                         thisRemote.store._getCommitGraph(moreHaves, 32, function(commits, next) {
-                            thisRemote.fetchRef(wantRefs, commits, next, callback);
+                            thisRemote.fetchRef(wantRefs, commits, depth, next, callback, noCommon);
                         });
                     }
                     else if (noCommon){
                         noCommon();
                     }
                 } else {
-                    UploadPackParser.parse(binaryData, store, function(objects, packData, common) {
-                        if (callback) {
-                            callback(objects, packData, common);
+                    // UploadPackParser.parse(binaryData, store, function(objects, packData, common) {
+                    //     if (callback) {
+                    //         callback(objects, packData, common);
+                    //     }
+                    // });
+                    function getModulePath(module, path) {
+                        var modulePath = module.uri.substr(0, module.uri.lastIndexOf("/") + 1);
+                        if (path) {
+                            modulePath += path;
                         }
-                    });
+                        
+                        return modulePath;
+                    }
+
+                    var packWorker = new Worker(getModulePath(self, "pack_worker.js"));
+                    packWorker.onmessage = function(evt){
+                        var msg = evt.data;
+                        if (msg.type == GitLiteWorkerMessages.FINISHED && callback){
+                            packWorker.terminate();
+                            callback(msg.objects, new Uint8Array(msg.data), msg.common);
+                        }
+                        else if (msg.type == GitLiteWorkerMessages.RETRIEVE_OBJECT){
+                            store._retrieveRawObject(msg.sha, "ArrayBuffer", function(baseObject){
+                                packWorker.postMessage({type: GitLiteWorkerMessages.OBJECT_RETRIEVED, id: msg.id, object: baseObject}, [baseObject.data]);
+                                var x = 0;
+                            });
+                        }
+                    }
+                    packWorker.postMessage({type: GitLiteWorkerMessages.START, data:binaryData}, [binaryData]);
                 }
             }
 
@@ -2272,7 +2117,7 @@ define('commands/clone',['commands/object2file', 'formats/smart_http_remote', 'f
 
                     mkfile(gitDir, "HEAD", 'ref: ' + localHeadRef.name + '\n', function(){
                         mkfile(gitDir, localHeadRef.name, localHeadRef.sha + '\n', function(){
-                            remote.fetchRef([localHeadRef], null, null, function(objects, packData){
+                            remote.fetchRef([localHeadRef], null, depth, null, function(objects, packData){
                                 var packSha = packData.subarray(packData.length - 20);
                                 
                                 var packIdxData = PackIndex.writePackIdx(objects, packSha);
@@ -2791,7 +2636,7 @@ define('commands/pull',['commands/treemerger', 'commands/object2file', 'formats/
                                     branchRef.localHead = sha;
                                     
                                     store._getCommitGraph([sha], 32, function(commits, nextLevel){
-                                        remote.fetchRef([wantRef], commits, nextLevel, function(objects, packData, common){
+                                        remote.fetchRef([wantRef], commits, null, nextLevel, function(objects, packData, common){
                                             // fast forward merge
                                             if (common.indexOf(wantRef.localHead) != -1){
                                                 var packSha = packData.subarray(packData.length - 20);
@@ -8466,13 +8311,22 @@ Zlib.CompressionMethod = {DEFLATE:8, RESERVED:15};
 
 define("thirdparty/inflate.min", function(){});
 
+GitLiteWorkerMessages = {
+    PROGRESS : 0,
+    FINISHED: 1,
+    RETRIEVE_OBJECT: 2,
+    START: 4,
+    OBJECT_RETRIEVED: 5
+};
+define("worker_messages.js", function(){});
+
 // requirejs.config({
 //     shim: {
 
 //     }
 // });
 
-define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', 'commands/push', 'objectstore/file_repo', 'utils/errors', 'thirdparty/2.2.0-sha1', 'thirdparty/crc32', 'thirdparty/deflate.min', 'thirdparty/inflate.min'], function(clone, commit, init, pull, push, FileObjectStore, errutils){
+define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', 'commands/push', 'objectstore/file_repo', 'utils/errors', 'thirdparty/2.2.0-sha1', 'thirdparty/crc32', 'thirdparty/deflate.min', 'thirdparty/inflate.min', "worker_messages.js"], function(clone, commit, init, pull, push, FileObjectStore, errutils){
     
     var api = {
 
@@ -8510,7 +8364,7 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
             var objectStore = new FileObjectStore(options.dir);
             objectStore.init(function(){
                 //clone(dir, objectStore, url, callback);
-                clone({dir: options.dir, branch: options.branch, objectStore: objectStore, url: options.url}, success, error);
+                clone({dir: options.dir, branch: options.branch, objectStore: objectStore, url: options.url, depth: options.depth}, success, error);
             }, error);
         },
         pull : function(options, success, error){

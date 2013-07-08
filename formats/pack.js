@@ -76,20 +76,6 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils'], function(a
             return num;
         }
 
-        // var objectSizeInfosToSize = function(sizeInfos) {
-        //     var current = 0,
-        //         currentShift = 0,
-        //         i,
-        //         sizeInfo;
-
-        //     for (i = 0; i < sizeInfos.length; i++) {
-        //         sizeInfo = sizeInfos[i]
-        //         current += (parseInt(sizeInfo, 2) << currentShift)
-        //         currentShift += sizeInfo.length
-        //     }
-        //     return current
-        // }
-
         var PackedTypes = {
             COMMIT: 1,
             TREE: 2,
@@ -102,23 +88,6 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils'], function(a
         var getTypeStr = function(type) {
             return typeArray[type];
         }
-
-        // var packTypeSizeBits = function(type, size) {
-        //     var typeBits = map[type];
-        //     var shifter = size;
-        //     var bytes = [];
-        //     var idx = 0;
-
-        //     bytes[idx] = typeBits << 4 | (shifter & 0xf);
-        //     shifter = shifter >>> 4;
-
-        //     while (shifter != 0) {
-        //         bytes[idx] = bytes[idx] | 0x80;
-        //         bytes[++idx] = shifter & 0x7f;
-        //         shifter = shifter >>> 7;
-        //     }
-        //     return new Uint8Array(bytes);
-        // }
 
         var matchObjectHeader = function() {
             var objectStartOffset = offset;
@@ -141,68 +110,8 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils'], function(a
                 type: type,
                 offset: objectStartOffset
             }
-            // var sizeInfos = []
-            // var hintTypeAndSize = peek(1)[0].toString(2).rjust(8, "0")
-            // var typeStr = hintTypeAndSize.slice(1, 4)
-            // var needMore = (hintTypeAndSize[0] == "1")
-            // var hintAndSize = null
-            // var objectStartOffset = offset
-
-            // sizeInfos.push(hintTypeAndSize.slice(4, 8))
-            // advance(1)
-
-            // while (needMore) {
-            //     hintAndSize = peek(1)[0].toString(2).rjust(8, "0")
-            //     needMore = (hintAndSize[0] == "1")
-            //     sizeInfos.push(hintAndSize.slice(1))
-            //     advance(1)
-            // }
-            // return {
-            //     size: objectSizeInfosToSize(sizeInfos),
-            //     type: getType(typeStr),
-            //     offset: objectStartOffset
-            // }
+           
         }
-
-
-        // var intToBytes = function(val, atLeast) {
-        //     var bytes = []
-        //     var current = val
-        //     while (current > 0) {
-        //         bytes.push(current % 256)
-        //         current = Math.floor(current / 256)
-        //     }
-        //     while (atLeast && bytes.length < atLeast) {
-        //         bytes.push(0)
-        //     }
-        //     return bytes.reverse()
-        // }
-
-        // var matchBytes = function(bytes) {
-        //     var i
-        //     var nextByte
-        //     for (i = 0; i < bytes.length; i++) {
-        //         nextByte = peek(1)[0]
-        //         if (nextByte !== bytes[i]) {
-        //             throw (Error("adler32 checksum didn't match"))
-        //         }
-        //         advance(1)
-        //     }
-        // }
-
-        // var advanceToBytes = function(bytes) {
-        //     var nextByte
-        //     var matchedByteCount = 0
-        //     while (matchedByteCount < bytes.length) {
-        //         nextByte = peek(1)[0]
-        //         if (nextByte == bytes[matchedByteCount]) {
-        //             matchedByteCount++
-        //         } else {
-        //             matchedByteCount = 0
-        //         }
-        //         advance(1)
-        //     }
-        // }
 
         var objectHash = function(type, content) {
             var contentData = new Uint8Array(content);
@@ -246,61 +155,7 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils'], function(a
             return desiredOffset;
         }
 
-        // var matchOffsetDeltaObject = function(header, dataType, success) {
-
-
-        //     //var baseObject = getObjectAtOffset(desiredOffset)
-
-        //     var expandDelta = function(baseData, baseObject) {
-        //         var dataOffset = offset;
-        //         uncompressObject(dataOffset, "ArrayBuffer", function(buf, compressedLength) {
-
-        //             //var checksum = adler32(buf)
-        //             advance(compressedLength)
-
-        //             //matchBytes(intToBytes(checksum, 4))
-
-
-        //             var object = {
-        //                 type: header.type,
-        //                 //dataOffset: dataOffset,
-        //                 //crc: crc32.crc(data.subarray(header.offset, offset)),
-        //                 //desiredOffset: desiredOffset,
-        //                 offset: header.offset
-        //                 //chain:[]
-        //             }
-        //             object.data = applyDelta(new Uint8Array(baseData), new Uint8Array(buf));
-        //             object.type = baseObject.type
-        //             delete object.desiredOffset
-
-        //             object.sha = objectHash(object.type, object.data)
-        //             //var buf = reader.result;
-        //             // expandOffsetDelta(baseObject, deltaObject, new Uint8Array(baseData), new Uint8Array(buf), dataType, function(expandedData) {
-        //             //     success(deltaObject, offset);
-        //             // });
-        //         });
-        //     }
-
-        //     if (header.type == "ofs_delta") {
-        //         var desiredOffset = findDeltaBaseOffset(header);
-        //         var oldOffset = offset;
-        //         matchObjectAtOffset(desiredOffset, "ArrayBuffer", function(baseObject) {
-        //             offset = oldOffset;
-        //             expandDelta(baseObject.data, baseObject);
-        //         });
-        //     } else {
-        //         var shaBytes = peek(20)
-        //         advance(20)
-        //         var sha = _(shaBytes).map(function(b) {
-        //             return b.toString(16).rjust(2, "0")
-        //         }).join("")
-
-        //         store._retrieveRawObject(sha, 'ArrayBuffer', function(baseObject) {
-        //             baseObject.sha = sha;
-        //             expandDelta(baseObject.data, baseObject);
-        //         });
-        //     }
-        // }
+        
         var expandDeltifiedObject = function(object, callback) {
 
             var doExpand = function(baseObject, deltaObject) {
@@ -435,24 +290,9 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils'], function(a
             })
         }
 
-        // var expandOffsetDelta = function(baseObject, object, baseObjectData, objectData, dataType, callback) {
-
-        //     applyDelta(baseObjectData, objectData, dataType, function(expandedData) {
-        //         object.type = baseObject.type
-        //         delete object.desiredOffset
-        //         object.data = expandedData
-
-        //         if (dataType == 'ArrayBuffer')
-        //             object.sha = objectHash(object.type, object.data)
-
-        //         callback(expandedData);
-        //     });
-
-        // }
-
         this.matchObjectAtOffset = matchObjectAtOffset;
 
-        this.parseAll = function(success) {
+        this.parseAll = function(success, progress) {
             try {
                 var numObjects;
                 var i;
@@ -463,7 +303,16 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils'], function(a
                 matchPrefix()
                 matchVersion(2)
                 numObjects = matchNumberOfObjects();
-                console.log("unpacking " + numObjects + " objects" );
+
+                if (progress){
+                    var tracker = 0;
+                    var trackProgress = function(){
+                        progress({at: ++tracker, total: numObjects});
+                    }
+                }
+                else{
+                    var trackProgress = function(){};
+                }
                 for (i = 0; i < numObjects; i++) {
                     var object = matchObjectAtOffset(offset);
 
@@ -480,49 +329,23 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils'], function(a
                         default:
                             object.sha = objectHash(object.type, object.data);
                             delete object.data;
+                            trackProgress();
                             break;
                     }
                     objects.push(object);
-                    if ((i % 1000) == 0){
-                        console.log('unpacked ' + i);
-                    }
                 }
 
-                console.log('unpacking ' + deferredObjects.length + " deferred objects");
-                var complete = 0;
                 deferredObjects.asyncEach(function(obj, done) {
-                    expandDeltifiedObject(obj, function(){
-                        complete++;
-                        if ((complete % 1000) == 0){
-                            console.log('unpacked ' + complete + ' deferred objects');
-                        }
+                    expandDeltifiedObject(obj, function(obj){
+                        delete obj.data;
+                        trackProgress();
                         done();
                     });
                 },
                     success);
 
-                // var findNextOrQuit = function(object, nextOffset) {
-                //     object.crc = crc32.crc(data.subarray(object.offset, nextOffset));
-                //     object.sha = objectHash(object.type, object.data);
-                //     delete object.data;
-                //     objects.push(object);
-
-                //     progressCounter.objectCount++;
-                //     if (numObjects == progressCounter.objectCount) {
-                //         //write out pack file
-                //         success();
-
-                //     } else {
-                //         matchObjectAtOffset(nextOffset, 'ArrayBuffer', findNextOrQuit);
-                //     }
-                // }
-
-                // //for (i = 0; i < numObjects; i++) {
-                // matchObjectAtOffset(offset, 'ArrayBuffer', findNextOrQuit);
-                //}
-
             } catch (e) {
-                console.log("Error caught in pack file parsing data") // + Git.stringToBytes(data.getRawData()))
+                //console.log("Error caught in pack file parsing data") // + Git.stringToBytes(data.getRawData()))
                 throw (e)
             }
             return this
