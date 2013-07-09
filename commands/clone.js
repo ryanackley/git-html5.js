@@ -38,6 +38,7 @@ define(['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index
             callback = success,
             depth = options.depth,
             branch = options.branch || 'master',
+            progress = options.progress,
             ferror = errutils.fileErrorFunc(error);
 
         var mkdirs = fileutils.mkdirs,
@@ -96,7 +97,7 @@ define(['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index
                                         mkfile(gitDir, 'config.json', JSON.stringify(config), callback, ferror);    
                                     });
                                 }, ferror); 
-                            });
+                            }, null, progress);
                         }, ferror);
                     }, ferror);
                 });

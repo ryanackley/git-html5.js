@@ -1,0 +1,15 @@
+GitLiteWorkerMessages = {
+    PROGRESS : 0,
+    FINISHED: 1,
+    RETRIEVE_OBJECT: 2,
+    START: 4,
+    OBJECT_RETRIEVED: 5,
+
+    API_CALL_CLONE: 6,
+    API_CALL_COMMIT: 7,
+    API_CALL_PULL: 8,
+    API_CALL_PUSH: 9,
+
+    SUCCESS: 10,
+    ERROR: 11
+}

@@ -1,4 +1,4 @@
-define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils'], function(applyDelta, utils, fileutils) {
+define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils', 'thirdparty/2.2.0-sha1'], function(applyDelta, utils, fileutils) {
 
     String.prototype.rjust = function(width, padding) {
         padding = padding || " ";
@@ -313,6 +313,7 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils'], function(a
                 else{
                     var trackProgress = function(){};
                 }
+                trackProgress();
                 for (i = 0; i < numObjects; i++) {
                     var object = matchObjectAtOffset(offset);
 

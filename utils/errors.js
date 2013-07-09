@@ -52,7 +52,7 @@ define(function() {
             }
             return function(e) {
                 var msg = errors.getFileErrorMsg(e);
-                onError({type : errors.FILE_IO_ERROR, msg: msg, fe: e});
+                onError({type : errors.FILE_IO_ERROR, msg: msg, fe: e.code});
             }
         },
 

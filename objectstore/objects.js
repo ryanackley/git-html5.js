@@ -1,4 +1,4 @@
-define(['utils/misc_utils'], function(utils){
+define(['utils/misc_utils', 'thirdparty/underscore-min'], function(utils){
   GitObjects = {
     CONSTRUCTOR_NAMES:{
       "blob": "Blob", 

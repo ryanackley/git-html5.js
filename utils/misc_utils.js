@@ -1,4 +1,4 @@
-define(function(){
+define(['thirdparty/inflate.min', 'thirdparty/deflate.min'], function(){
     /* Main object */
     var utils = {
       

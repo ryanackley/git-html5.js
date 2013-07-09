@@ -213,9 +213,9 @@ $(document).ready(function(){
                 //         callback(repo, sha);
                 //     });
                 // });
-                GitLite.init({dir: testDir}, function(){
+                //GitLite.init({dir: testDir}, function(){
                     GitLite.commit({dir:testDir, username: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, callback);
-                });
+                //});
             });
         }
         

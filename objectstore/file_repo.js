@@ -1,5 +1,8 @@
 define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc_utils', 'utils/file_utils', 'utils/errors'], function(Pack, PackIndex, GitObjects, utils, fileutils, errutils){
 
+	String.prototype.endsWith = function(suffix){
+    	return this.lastIndexOf(suffix) == (this.length - suffix.length);
+	}
 
 	var FileObjectStore = function(rootDir) {
 	 	this.dir = rootDir;

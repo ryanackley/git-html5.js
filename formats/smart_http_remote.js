@@ -1,4 +1,7 @@
 define(['formats/upload_pack_parser', 'utils/errors'], function(UploadPackParser, errutils) {
+    // var workerBlob = new Blob([packWorkerText]);
+    // var workerUrl = URL.createObjectURL(workerBlob);
+
     var SmartHttpRemote = function(store, name, repoUrl, error) {
         this.store = store;
         this.name = name;
@@ -109,10 +112,27 @@ define(['formats/upload_pack_parser', 'utils/errors'], function(UploadPackParser
 
         this.urlOptions = queryParams(repoUrl);
 
+        function doGet(url, success){
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", url, true);
+
+            xhr.onload = function(evt){
+                if (xhr.readyState == 4) {
+                    if (xhr.status == 200) {
+                        success(xhr.responseText);
+                    } 
+                    else{ 
+                        var obj = {url: url, type: 'GET'};
+                        ajaxErrorHandler.call(obj, xhr, xhr.statusText, ""); 
+                    }
+                }
+            }
+            xhr.send();
+        }
         this.fetchRefs = function(callback) {
             var remote = this,
                 uri = this.makeUri('/info/refs', {service: "git-upload-pack"});
-            $.get(uri, "", function(data) {
+            doGet(uri, function(data) {
                 var discInfo = parseDiscovery(data)
                 var i, ref
                 for (i = 0; i < discInfo.refs.length; i++) {
@@ -122,13 +142,13 @@ define(['formats/upload_pack_parser', 'utils/errors'], function(UploadPackParser
                 if (callback != "undefined") {
                     callback(discInfo.refs)
                 }
-            }).fail(ajaxErrorHandler);
+            });
         }
 
         this.fetchReceiveRefs = function(callback) {
             var remote = this,
                 uri = this.makeUri('/info/refs', {service: "git-receive-pack"});
-            $.get(uri, "", function(data) {
+            doGet(uri, function(data) {
                 var discInfo = parseDiscovery(data)
                 var i, ref
                 for (i = 0; i < discInfo.refs.length; i++) {
@@ -138,7 +158,7 @@ define(['formats/upload_pack_parser', 'utils/errors'], function(UploadPackParser
                 if (callback != "undefined") {
                     callback(discInfo.refs)
                 }
-            }).fail(ajaxErrorHandler);
+            });
         }
 
         this.fetchRef = function(wantRefs, haveRefs, depth, moreHaves, callback, noCommon, progress) {
@@ -162,32 +182,35 @@ define(['formats/upload_pack_parser', 'utils/errors'], function(UploadPackParser
                         noCommon();
                     }
                 } else {
-                    // UploadPackParser.parse(binaryData, store, function(objects, packData, common) {
-                    //     if (callback) {
-                    //         callback(objects, packData, common);
+                    UploadPackParser.parse(binaryData, store, function(objects, packData, common) {
+                        if (callback) {
+                            callback(objects, packData, common);
+                        }
+                    }, progress);
+                    // var packWorker = new Worker(workerUrl);
+                    // packWorker.onmessage = function(evt){
+                    //     var msg = evt.data;
+                    //     if (msg.type == GitLiteWorkerMessages.FINISHED && callback){
+                    //         packWorker.terminate();
+                    //         callback(msg.objects, new Uint8Array(msg.data), msg.common);
                     //     }
-                    // });
-                    var packWorker = new Worker("pack_worker.js");
-                    packWorker.onmessage = function(evt){
-                        var msg = evt.data;
-                        if (msg.type == GitLiteWorkerMessages.FINISHED && callback){
-                            packWorker.terminate();
-                            callback(msg.objects, new Uint8Array(msg.data), msg.common);
-                        }
-                        else if (msg.type == GitLiteWorkerMessages.RETRIEVE_OBJECT){
-                            store._retrieveRawObject(msg.sha, "ArrayBuffer", function(baseObject){
-                                packWorker.postMessage({type: GitLiteWorkerMessages.OBJECT_RETRIEVED, id: msg.id, object: baseObject}, [baseObject.data]);
-                                var x = 0;
-                            });
-                        }
-                    }
-                    packWorker.postMessage({type: GitLiteWorkerMessages.START, data:binaryData}, [binaryData]);
+                    //     else if (msg.type == GitLiteWorkerMessages.RETRIEVE_OBJECT){
+                    //         store._retrieveRawObject(msg.sha, "ArrayBuffer", function(baseObject){
+                    //             packWorker.postMessage({type: GitLiteWorkerMessages.OBJECT_RETRIEVED, id: msg.id, object: baseObject}, [baseObject.data]);
+                    //             var x = 0;
+                    //         });
+                    //     }
+                    //     else if (progress && msg.type == GitLiteWorkerMessages.PROGRESS){
+                    //         progress(msg);
+                    //     }
+                    // }
+                    // packWorker.postMessage({type: GitLiteWorkerMessages.START, data:binaryData}, [binaryData]);
                 }
             }
 
             var xhr2ErrorShim = function(){
                 var obj = {url: url, type: 'POST'};
-                ajaxErrorHandler.call(obj, xhr, statusText, ""); 
+                ajaxErrorHandler.call(obj, xhr, xhr.statusText, ""); 
             }
 
             xhr.onerror = xhr2ErrorShim;
@@ -238,7 +261,7 @@ define(['formats/upload_pack_parser', 'utils/errors'], function(UploadPackParser
                     } 
                     else{ 
                         var obj = {url: url, type: 'POST'};
-                        ajaxErrorHandler.call(obj, xhr, statusText, ""); 
+                        ajaxErrorHandler.call(obj, xhr, xhr.statusText, ""); 
                     }
                 }
             }
