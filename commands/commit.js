@@ -38,8 +38,11 @@ define(['utils/file_utils', 'utils/misc_utils', 'utils/errors'], function (fileu
             },
             function(){
                 treeEntries.sort(function(a,b){
-                    if (a.name < b.name) return -1;
-                    else if (a.name > b.name) return 1;
+                    //http://permalink.gmane.org/gmane.comp.version-control.git/195004
+                    var aName = a.isBlob ? a.name : (a.name + '/');
+                    var bName = b.isBlob ? b.name : (b.name + '/');
+                    if (aName < bName) return -1;
+                    else if (aName > bName) return 1;
                     else
                     return 0;
                 });
@@ -56,7 +59,7 @@ define(['utils/file_utils', 'utils/misc_utils', 'utils/errors'], function (fileu
             store._retrieveObject(parent, "Commit", function(parentCommit){
                 var oldTree = parentCommit.tree;
                 if (oldTree == sha){
-                    error({type: errutils.COMMIT_NO_CHANGES, msg: errutils.COMMIT_NO_CHANGES});
+                    error({type: errutils.COMMIT_NO_CHANGES, msg: errutils.COMMIT_NO_CHANGES_MSG});
                 }
                 else{
                     success();
@@ -95,7 +98,7 @@ define(['utils/file_utils', 'utils/misc_utils', 'utils/errors'], function (fileu
                     'committer ', username,' <', email, '> ', dateString, '\n\n', commitMsg,'\n');
                 store.writeRawObject('commit', commitContent.join(''), function(commitSha){
                     fileutils.mkfile(dir, '.git/' + ref, commitSha + '\n', function(){
-                        store.updateLastChange(function(){
+                        store.updateLastChange(null, function(){
                             success(commitSha);
                         });
                     });

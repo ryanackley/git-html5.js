@@ -188,9 +188,9 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils', 'thirdparty
                 });
             }
         }
-        var uncompressObject = function(objOffset) {
+        var uncompressObject = function(objOffset, uncompressedLength) {
             var deflated = data.subarray(objOffset);
-            var out = utils.inflate(deflated);
+            var out = utils.inflate(deflated, uncompressedLength);
 
             return {
                 buf: utils.trimBuffer(out),
@@ -223,7 +223,7 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils', 'thirdparty
                     break;
 
             }
-            var objData = uncompressObject(offset);
+            var objData = uncompressObject(offset, header.size);
             object.data = objData.buf;
 
             //var checksum = adler32(buf)
@@ -244,12 +244,12 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils', 'thirdparty
         // synchronouse execution of callbacks for the case of non deltified objects in the
         // pack.
         var matchAndExpandObjectAtOffset = function(startOffset, dataType, callback) {
-            var reverseMap = [null, "commit", "tree", "blob"]
+            //var reverseMap = [null, "commit", "tree", "blob"]
 
             var object = matchObjectAtOffset(startOffset);
 
             var convertToDataType = function(object) {
-                object.type = reverseMap[object.type];
+                //object.type = reverseMap[object.type];
                 if (dataType != 'ArrayBuffer') {
                     var reader = new FileReader();
 
@@ -306,8 +306,12 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils', 'thirdparty
 
                 if (progress){
                     var tracker = 0;
+                    var lastPercent = 0;
                     var trackProgress = function(){
-                        progress({at: ++tracker, total: numObjects});
+                        var pct = (++tracker/numObjects) * 100
+                        if (pct - lastPercent >= 1){
+                            progress({pct: pct, msg: "Unpacking " + tracker + '/' + numObjects + " objects"});
+                        }
                     }
                 }
                 else{
@@ -374,7 +378,7 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils', 'thirdparty
         };
 
         var packTypeSizeBits = function(type, size) {
-            var typeBits = map[type];
+            var typeBits = type;//map[type];
             var shifter = size;
             var bytes = [];
             var idx = 0;
@@ -463,6 +467,7 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils', 'thirdparty
             } else {
                 visited[treeSha] = true;
             }
+            
 
             repo._retrieveObject(treeSha, 'Tree', function(tree, rawObj) {
                 var childCount = {
@@ -497,18 +502,22 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils', 'thirdparty
             });
         }
 
-
-        commits.forEach(function(commitObj) {
-            //repo._retrieveObject(commitShas[i], 'Commit', function(commit, rawObj){
-            var commit = commitObj.commit;
-            packIt(commitObj.raw);
-            walkTree(commit.tree, function() {
-                if (++counter.x == commits.length) {
-                    finishPack();
-                }
+        if (commits.length == 0){
+            finishPack();
+        }
+        else{
+            commits.forEach(function(commitObj) {
+                //repo._retrieveObject(commitShas[i], 'Commit', function(commit, rawObj){
+                var commit = commitObj.commit;
+                packIt(commitObj.raw);
+                walkTree(commit.tree, function() {
+                    if (++counter.x == commits.length) {
+                        finishPack();
+                    }
+                });
+                //});
             });
-            //});
-        });
+        }
 
     }
     return Pack;

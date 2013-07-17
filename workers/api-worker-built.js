@@ -5398,8 +5398,12 @@ define('utils/misc_utils',['thirdparty/inflate.min', 'thirdparty/deflate.min'], 
             }
             return 0;
         },
-        inflate: function(data){
-            var inflate = new Zlib.Inflate(data);
+        inflate: function(data, expectedLength){
+            var options;
+            if (expectedLength){
+              options = {bufferSize: expectedLength};
+            } 
+            var inflate = new Zlib.Inflate(data, options);
             inflate.verify = true;
             var out = inflate.decompress();
             out.compressedLength = inflate.ip;
@@ -5454,8 +5458,15 @@ define('utils/file_utils',['utils/misc_utils'], function(utils){
 			root.getFile(filename, {create:true}, function(fileEntry){
 				fileEntry.createWriter(function(writer){
 					writer.onwriteend = function(){
-						if (callback)
+						// strange piece of the FileWriter api. Writing to an 
+						// existing file just overwrites content in place. Still need to truncate
+						// which triggers onwritend event...again. o_O
+						if (writer.position < writer.length){
+							writer.truncate(writer.position);	
+						}
+						else if (callback)
 							callback(fileEntry);
+
 					}
 					if (contents instanceof ArrayBuffer){
 						contents = new Uint8Array(contents);
@@ -5887,9 +5898,9 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
                 });
             }
         }
-        var uncompressObject = function(objOffset) {
+        var uncompressObject = function(objOffset, uncompressedLength) {
             var deflated = data.subarray(objOffset);
-            var out = utils.inflate(deflated);
+            var out = utils.inflate(deflated, uncompressedLength);
 
             return {
                 buf: utils.trimBuffer(out),
@@ -5922,7 +5933,7 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
                     break;
 
             }
-            var objData = uncompressObject(offset);
+            var objData = uncompressObject(offset, header.size);
             object.data = objData.buf;
 
             //var checksum = adler32(buf)
@@ -5943,12 +5954,12 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
         // synchronouse execution of callbacks for the case of non deltified objects in the
         // pack.
         var matchAndExpandObjectAtOffset = function(startOffset, dataType, callback) {
-            var reverseMap = [null, "commit", "tree", "blob"]
+            //var reverseMap = [null, "commit", "tree", "blob"]
 
             var object = matchObjectAtOffset(startOffset);
 
             var convertToDataType = function(object) {
-                object.type = reverseMap[object.type];
+                //object.type = reverseMap[object.type];
                 if (dataType != 'ArrayBuffer') {
                     var reader = new FileReader();
 
@@ -6005,8 +6016,12 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
 
                 if (progress){
                     var tracker = 0;
+                    var lastPercent = 0;
                     var trackProgress = function(){
-                        progress({at: ++tracker, total: numObjects});
+                        var pct = (++tracker/numObjects) * 100
+                        if (pct - lastPercent >= 1){
+                            progress({pct: pct, msg: "Unpacking " + tracker + '/' + numObjects + " objects"});
+                        }
                     }
                 }
                 else{
@@ -6073,7 +6088,7 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
         };
 
         var packTypeSizeBits = function(type, size) {
-            var typeBits = map[type];
+            var typeBits = type;//map[type];
             var shifter = size;
             var bytes = [];
             var idx = 0;
@@ -6162,6 +6177,7 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
             } else {
                 visited[treeSha] = true;
             }
+            
 
             repo._retrieveObject(treeSha, 'Tree', function(tree, rawObj) {
                 var childCount = {
@@ -6196,18 +6212,22 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
             });
         }
 
-
-        commits.forEach(function(commitObj) {
-            //repo._retrieveObject(commitShas[i], 'Commit', function(commit, rawObj){
-            var commit = commitObj.commit;
-            packIt(commitObj.raw);
-            walkTree(commit.tree, function() {
-                if (++counter.x == commits.length) {
-                    finishPack();
-                }
+        if (commits.length == 0){
+            finishPack();
+        }
+        else{
+            commits.forEach(function(commitObj) {
+                //repo._retrieveObject(commitShas[i], 'Commit', function(commit, rawObj){
+                var commit = commitObj.commit;
+                packIt(commitObj.raw);
+                walkTree(commit.tree, function() {
+                    if (++counter.x == commits.length) {
+                        finishPack();
+                    }
+                });
+                //});
             });
-            //});
-        });
+        }
 
     }
     return Pack;
@@ -6220,12 +6240,16 @@ define('formats/upload_pack_parser',['formats/pack', 'utils/misc_utils'], functi
         var objects = null;
 
         var peek = function(length) {
-            return Array.prototype.slice.call(data, offset, offset + length);
+            return data.subarray(offset, offset + length);
         };
 
         var advance = function(length) {
             offset += length;
         };
+
+        var getPktLineStr = function(pktLine){
+            return utils.bytesToString(data.subarray(pktLine.start, pktLine.end));
+        }
 
         // A pkt-line is defined in http://git-scm.com/gitserver.txt
         var nextPktLine = function(isShallow) {
@@ -6238,7 +6262,7 @@ define('formats/upload_pack_parser',['formats/pack', 'utils/misc_utils'], functi
                     return nextPktLine()
                 }
             } else {
-                pktLine = peek(length - 4);
+                pktLine = {start: offset, end: offset + length - 4};//peek(length - 4);
                 advance(length - 4);
             }
             return pktLine;
@@ -6249,15 +6273,17 @@ define('formats/upload_pack_parser',['formats/pack', 'utils/misc_utils'], functi
         var pktLine = nextPktLine()
         var packFileParser
         var remoteLine = ""
-        var packData = ""
+        //var packData = ""
         var gotAckOrNak = false
         var ackRegex = /ACK ([0-9a-fA-F]{40}) common/;
         var common = [];
 
-        var pktLineStr = utils.bytesToString(pktLine);
+        var pktLineStr = getPktLineStr(pktLine);//utils.bytesToString(data.slice(pktLine.start, pktLine.end));
+        var shallow;
         while (pktLineStr.slice(0, 7) === "shallow") {
             pktLine = nextPktLine(true);
-            pktLineStr = utils.bytesToString(pktLine);
+            shallow = pktLineStr.substring(8);
+            pktLineStr = getPktLineStr(pktLine);
         }
 
         while (pktLineStr === "NAK\n" ||
@@ -6267,39 +6293,46 @@ define('formats/upload_pack_parser',['formats/pack', 'utils/misc_utils'], functi
                 common.push(matches[1]);
             }
             pktLine = nextPktLine();
-            pktLineStr = utils.bytesToString(pktLine);
+            pktLineStr = getPktLineStr(pktLine);
             gotAckOrNak = true;
         }
 
         if (!gotAckOrNak) {
             throw (Error("got neither ACK nor NAK in upload pack response"))
         }
-
+        var packDataLines = [];
         while (pktLine !== null) {
+            var pktLineType = data[pktLine.start];
             // sideband format. "2" indicates progress messages, "1" pack data
-            if (pktLine[0] == 2) {
-                var lineString = utils.bytesToString(pktLine)
-                lineString = lineString.slice(1, lineString.length)
-                remoteLine += lineString
-            } else if (pktLine[0] == 1) {
-                packData += utils.bytesToString(pktLine.slice(1))
-            } else if (pktLine[0] == 3) {
-                throw (Error("fatal error in packet line"))
+            switch (pktLineType){
+                case 2:
+                    break;
+                case 1:
+                    //packData += utils.bytesToString(pktLine.slice(1))
+                    packDataLines.push(data.subarray(pktLine.start + 1, pktLine.end));
+                    break;
+                case 3:
+                    throw (Error("fatal error in packet line"))
+                    break;    
             }
             pktLine = nextPktLine()
         }
 
-        packFileParser = new Pack(packData, repo)
-        packData = null;
-        data = null;
-        binaryString = null;
-        packFileParser.parseAll(function() {
-            objects = packFileParser.getObjects()
+        // create a blob from the packdata lines then read it as an arraybuffer
+        var packDataBlob = new Blob(packDataLines);
+        var reader = new FileReader();
+        reader.onloadend = function(e){
+            var packData = reader.result;
+            packFileParser = new Pack(packData, repo);
 
-           // console.log("took " + (new Date().getTime() - startTime.getTime()) + "ms")
-            success(objects, packFileParser.getData(), common);
-        }, progress);
+            packFileParser.parseAll(function() {
+                objects = packFileParser.getObjects()
 
+               // console.log("took " + (new Date().getTime() - startTime.getTime()) + "ms")
+                success(objects, packFileParser.getData(), common, shallow);
+            }, progress);
+        }
+        reader.readAsArrayBuffer(packDataBlob);
     };
     return {
         parse: parse
@@ -6310,8 +6343,10 @@ define('utils/errors',[],function() {
     var errors = {
         // Indicates an unexpected error in the file system.
         FILE_IO_ERROR: 0,
+        FILE_IO_ERROR_MSG: 'Unexpected File I/O error',
         // Indicates an unexpected ajax error when trying to make a request
         AJAX_ERROR: 1, 
+        AJAX_ERROR_MSG: 'Unexpected ajax error',
         
         // trying to clone into a non-empty directory
         CLONE_DIR_NOT_EMPTY: 2,
@@ -6333,8 +6368,9 @@ define('utils/errors',[],function() {
         PULL_UP_TO_DATE: 7,
         PULL_UP_TO_DATE_MSG: 'Everything is up to date',
 
-        PULL_UNCOMMITTED_CHANGES: 11,
-        PULL_UNCOMMITTED_CHANGES_MSG: 'There are changes in the working directory that haven\'t been committed',
+
+        UNCOMMITTED_CHANGES: 11,
+        UNCOMMITTED_CHANGES_MSG: 'There are changes in the working directory that haven\'t been committed',
 
         // Nothing to commit
         COMMIT_NO_CHANGES: 8,
@@ -6343,14 +6379,32 @@ define('utils/errors',[],function() {
         // The remote repo and the local repo share the same head.
         PUSH_NO_CHANGES: 9,
         PUSH_NO_CHANGES_MSG: 'No new commits to push to the repository',
+
+        PUSH_NO_REMOTE: 16,
+        PUSH_NO_REMOTE_MSG: 'No remote to push to',
+
         // Need to merge remote changes first. 
         PUSH_NON_FAST_FORWARD: 10,
         PUSH_NON_FAST_FORWARD_MSG: 'The remote repo has new commits on your current branch. You need to merge them first.',
 
+        BRANCH_ALREADY_EXISTS: 14,
+        BRANCH_ALREADY_EXISTS_MSG: 'A local branch with that name already exists',
+
+        BRANCH_NAME_NOT_VALID: 12,
+        BRANCH_NAME_NOT_VALID_MSG: 'The branch name is not valid.',
+
+        CHECKOUT_BRANCH_NO_EXISTS: 15,
+        CHECKOUT_BRANCH_NO_EXISTS_MSG: 'No local branch with that name exists',
 
         // unexpected problem retrieving objects
         OBJECT_STORE_CORRUPTED: 200,
         OBJECT_STORE_CORRUPTED_MSG: 'Git object store may be corrupted',
+
+        HTTP_AUTH_ERROR: 201,
+        HTTP_AUTH_ERROR_MSG: 'Http authentication failed',
+
+        UNPACK_ERROR: 202,
+        UNPACK_ERROR_MSG: 'The remote git server wasn\'t able to understand the push request.',
 
         
         fileErrorFunc : function(onError){
@@ -6364,11 +6418,19 @@ define('utils/errors',[],function() {
         },
 
         ajaxErrorFunc : function(onError){
-            return function(xhr, status, errorThrown){
+            return function(xhr){
                 var url = this.url,
                     reqType = this.type;
 
-                onError({type: errors.AJAX_ERROR, url: url, reqType: reqType, status: status, errorThrown: errorThrown});  
+                var httpErr;
+                if (xhr.status == 401){
+                    var auth = xhr.getResponseHeader('WWW-Authenticate');
+                    httpErr = {type: errors.HTTP_AUTH_ERROR, msg: errors.HTTP_AUTH_ERROR_MSG, auth: auth};
+                }
+                else{
+                    httpErr = {type: errors.AJAX_ERROR, url: url, reqType: reqType, statusText: xhr.statusText, status: xhr.status};
+                }
+                onError(httpErr);  
             }
         },
 
@@ -6425,15 +6487,36 @@ define('utils/errors',[],function() {
     return errors;
 
 });
-define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors'], function(UploadPackParser, errutils) {
+define('utils/progress_chunker',[],function(){
+
+    var ProgressChunker = function(func){
+        this.master = func;
+    }
+
+    ProgressChunker.prototype = {
+        getChunk : function(start, fraction){
+            var self = this;
+            return function(data){
+                var newPct = start + (data.pct * fraction)
+                self.master({pct: newPct, msg: data.msg});
+            }
+        }
+    }
+
+    return ProgressChunker;
+
+});
+define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors', 'utils/progress_chunker'], function(UploadPackParser, errutils, ProgressChunker) {
     // var workerBlob = new Blob([packWorkerText]);
     // var workerUrl = URL.createObjectURL(workerBlob);
 
-    var SmartHttpRemote = function(store, name, repoUrl, error) {
+    var SmartHttpRemote = function(store, name, repoUrl, username, password, error) {
         this.store = store;
         this.name = name;
         this.refs = {};
         this.url = repoUrl.replace(/\?.*/, "").replace(/\/$/, "");
+        username = username || "";
+        password = password || "";
 
         var ajaxErrorHandler = errutils.ajaxErrorFunc(error);
 
@@ -6495,12 +6578,15 @@ define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors'
 
         }
 
-        var refWantRequest = function(wantRefs, haveRefs, depth, moreHaves) {
+        var refWantRequest = function(wantRefs, haveRefs, shallow, depth, moreHaves) {
             var str = "0067want " + wantRefs[0].sha + " multi_ack_detailed side-band-64k thin-pack ofs-delta\n"
             for (var i = 1; i < wantRefs.length; i++) {
                 str += "0032want " + wantRefs[i].sha + "\n"
             }
             if (haveRefs && haveRefs.length) {
+                if (shallow){
+                    str += "0034shallow " + shallow;
+                }
                 str += "0000"
                 _(haveRefs).each(function(haveRef) {
                     str += "0032have " + haveRef.sha + "\n"
@@ -6541,7 +6627,7 @@ define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors'
 
         function doGet(url, success){
             var xhr = new XMLHttpRequest();
-            xhr.open("GET", url, true);
+            xhr.open("GET", url, true, username, password);
 
             xhr.onload = function(evt){
                 if (xhr.readyState == 4) {
@@ -6550,7 +6636,7 @@ define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors'
                     } 
                     else{ 
                         var obj = {url: url, type: 'GET'};
-                        ajaxErrorHandler.call(obj, xhr, xhr.statusText, ""); 
+                        ajaxErrorHandler.call(obj, xhr); 
                     }
                 }
             }
@@ -6588,16 +6674,25 @@ define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors'
             });
         }
 
-        this.fetchRef = function(wantRefs, haveRefs, depth, moreHaves, callback, noCommon, progress) {
+        this.fetchRef = function(wantRefs, haveRefs, shallow, depth, moreHaves, callback, noCommon, progress) {
             var url = this.makeUri('/git-upload-pack')
-            var body = refWantRequest(wantRefs, haveRefs, depth);
+            var body = refWantRequest(wantRefs, haveRefs, shallow, depth);
             var thisRemote = this
             var xhr = new XMLHttpRequest();
-            xhr.open("POST", url, true);
+
+            var packProgress, receiveProgress;
+            if (progress){
+                var chunker = new ProgressChunker(progress);
+                receiveProgress = chunker.getChunk(0, 0.2);
+                packProgress = chunker.getChunk(20, 0.8);
+            }
+
+            xhr.open("POST", url, true, username, password);
             xhr.responseType = 'arraybuffer';
             xhr.setRequestHeader("Content-Type", "application/x-git-upload-pack-request");
 
             xhr.onload = function() {
+
                 var binaryData = xhr.response;
                 if (haveRefs && String.fromCharCode.apply(null, new Uint8Array(binaryData, 4, 3)) == "NAK") {
                     if (moreHaves) {
@@ -6609,11 +6704,14 @@ define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors'
                         noCommon();
                     }
                 } else {
-                    UploadPackParser.parse(binaryData, store, function(objects, packData, common) {
+                    if (packProgress){
+                        packProgress({pct: 0, msg: "Parsing pack data"});
+                    }
+                    UploadPackParser.parse(binaryData, store, function(objects, packData, common, shallow) {
                         if (callback) {
-                            callback(objects, packData, common);
+                            callback(objects, packData, common, shallow);
                         }
-                    }, progress);
+                    }, packProgress);
                     // var packWorker = new Worker(workerUrl);
                     // packWorker.onmessage = function(evt){
                     //     var msg = evt.data;
@@ -6634,16 +6732,28 @@ define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors'
                     // packWorker.postMessage({type: GitLiteWorkerMessages.START, data:binaryData}, [binaryData]);
                 }
             }
+            if (receiveProgress){
+                xhr.onprogress = function(evt){
+                    // if (evt.lengthComputable){
+                    //     var pct = evt.loaded / evt.total;
+                    //     receiveProgress({pct: pct, msg: "Received " + evt.loaded + "/" + evt.total + " bytes"});
+                    // }
+                    // else{
 
+                        receiveProgress({pct: 100, msg: "Received " + (evt.loaded/1048576).toFixed(2) + " MB"});
+                    // }
+                }
+            }
             var xhr2ErrorShim = function(){
                 var obj = {url: url, type: 'POST'};
-                ajaxErrorHandler.call(obj, xhr, xhr.statusText, ""); 
+                ajaxErrorHandler.call(obj, xhr); 
             }
 
             xhr.onerror = xhr2ErrorShim;
             xhr.onabort = xhr2ErrorShim;
 
             xhr.send(body);
+
             //  $.ajax({
             //    url: url,
             //    data: body,
@@ -6676,23 +6786,33 @@ define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors'
             //  });
         },
 
-        this.pushRefs = function(refPaths, packData, success) {
+        this.pushRefs = function(refPaths, packData, success, progress) {
             var url = this.makeUri('/git-receive-pack');
             var body = pushRequest(refPaths, packData);
             var xhr = new XMLHttpRequest();
-            xhr.open("POST", url, true);
-            xhr.onreadystatechange = function(evt) {
+            xhr.open("POST", url, true, username, password);
+            xhr.onload = function(evt) {
                 if (xhr.readyState == 4) {
                     if (xhr.status == 200) {
-                        success();
+                        var msg = xhr.response;
+                        if (msg.indexOf('000eunpack ok') == 0){
+                            success();
+                        }
+                        else{
+                            error({type: errutils.UNPACK_ERROR, msg: errutils.UNPACK_ERROR_MSG});
+                        }
                     } 
                     else{ 
                         var obj = {url: url, type: 'POST'};
-                        ajaxErrorHandler.call(obj, xhr, xhr.statusText, ""); 
+                        ajaxErrorHandler.call(obj, xhr); 
                     }
                 }
             }
             xhr.setRequestHeader('Content-Type', 'application/x-git-receive-pack-request');
+            var bodySize = (body.size/1024).toFixed(2);
+            xhr.upload.onprogress = function(evt){
+                progress({pct: evt.loaded/body.size * 100, msg: 'Sending ' + (evt.loaded/1024).toFixed(2) + '/' + bodySize + " KB"});
+            }
             xhr.send(body);
             /*Gito.FileUtils.readBlob(body, 'BinaryString', function(strData){
     		$.ajax({
@@ -6979,7 +7099,7 @@ define('commands/clone',['commands/object2file', 'formats/smart_http_remote', 'f
             }
             else{
                 fileutils.ls(store.objectsDir, function(entries){
-                    if (entries > 0){
+                    if (entries.length > 0){
                         error({type: errutils.CLONE_GIT_DIR_IN_USE, msg: errutils.CLONE_GIT_DIR_IN_USE_MSG});
                     }
                     else{
@@ -7000,15 +7120,36 @@ define('commands/clone',['commands/object2file', 'formats/smart_http_remote', 'f
             depth = options.depth,
             branch = options.branch || 'master',
             progress = options.progress,
+            username = options.username,
+            password = options.password,
             ferror = errutils.fileErrorFunc(error);
 
         var mkdirs = fileutils.mkdirs,
             mkfile = fileutils.mkfile,
-            remote = new SmartHttpRemote(store, "origin", url, error);
+            remote = new SmartHttpRemote(store, "origin", url, username, password, error);
+
+        var createInitialConfig = function(shallow, localHeadRef, callback){
+            var config = {url: url, time: new Date()};
+            if (options.depth && shallow){
+                config.shallow = shallow;
+            }
+            config.remoteHeads = {};
+            
+            if (localHeadRef)
+                config.remoteHeads[localHeadRef.name] = localHeadRef.sha;
+
+            store.setConfig(config, callback);  
+        }
 
         checkDirectory(dir, store, function(){ 
             mkdirs(dir, ".git", function(gitDir){
                 remote.fetchRefs(function(refs){
+                    
+                    if (!refs.length){
+                        createInitialConfig(null, null, success);
+                        return;
+                    }
+
                     var remoteHead, remoteHeadRef, localHeadRef;
 
                     _(refs).each(function(ref){
@@ -7037,7 +7178,7 @@ define('commands/clone',['commands/object2file', 'formats/smart_http_remote', 'f
 
                     mkfile(gitDir, "HEAD", 'ref: ' + localHeadRef.name + '\n', function(){
                         mkfile(gitDir, localHeadRef.name, localHeadRef.sha + '\n', function(){
-                            remote.fetchRef([localHeadRef], null, depth, null, function(objects, packData){
+                            remote.fetchRef([localHeadRef], null, null, depth, null, function(objects, packData, common, shallow){
                                 var packSha = packData.subarray(packData.length - 20);
                                 
                                 var packIdxData = PackIndex.writePackIdx(objects, packSha);
@@ -7054,8 +7195,7 @@ define('commands/clone',['commands/object2file', 'formats/smart_http_remote', 'f
                                     var packIdx = new PackIndex(packIdxData);
                                     store.loadWith(objectsDir, [{pack: new Pack(packData, self), idx: packIdx}]);
                                     _createCurrentTreeFromPack(dir, store, localHeadRef.sha, function(){
-                                        var config = {url: url, time: new Date()};
-                                        mkfile(gitDir, 'config.json', JSON.stringify(config), callback, ferror);    
+                                        createInitialConfig(shallow, localHeadRef, callback);
                                     });
                                 }, ferror); 
                             }, null, progress);
@@ -7107,8 +7247,11 @@ define('commands/commit',['utils/file_utils', 'utils/misc_utils', 'utils/errors'
             },
             function(){
                 treeEntries.sort(function(a,b){
-                    if (a.name < b.name) return -1;
-                    else if (a.name > b.name) return 1;
+                    //http://permalink.gmane.org/gmane.comp.version-control.git/195004
+                    var aName = a.isBlob ? a.name : (a.name + '/');
+                    var bName = b.isBlob ? b.name : (b.name + '/');
+                    if (aName < bName) return -1;
+                    else if (aName > bName) return 1;
                     else
                     return 0;
                 });
@@ -7125,7 +7268,7 @@ define('commands/commit',['utils/file_utils', 'utils/misc_utils', 'utils/errors'
             store._retrieveObject(parent, "Commit", function(parentCommit){
                 var oldTree = parentCommit.tree;
                 if (oldTree == sha){
-                    error({type: errutils.COMMIT_NO_CHANGES, msg: errutils.COMMIT_NO_CHANGES});
+                    error({type: errutils.COMMIT_NO_CHANGES, msg: errutils.COMMIT_NO_CHANGES_MSG});
                 }
                 else{
                     success();
@@ -7164,7 +7307,7 @@ define('commands/commit',['utils/file_utils', 'utils/misc_utils', 'utils/errors'
                     'committer ', username,' <', email, '> ', dateString, '\n\n', commitMsg,'\n');
                 store.writeRawObject('commit', commitContent.join(''), function(commitSha){
                     fileutils.mkfile(dir, '.git/' + ref, commitSha + '\n', function(){
-                        store.updateLastChange(function(){
+                        store.updateLastChange(null, function(){
                             success(commitSha);
                         });
                     });
@@ -7420,7 +7563,75 @@ define('commands/treemerger',['utils/misc_utils'], function(utils){
 	
 });
 
-define('commands/pull',['commands/treemerger', 'commands/object2file', 'formats/smart_http_remote', 'formats/pack_index', 'formats/pack', 'utils/file_utils', 'utils/errors'], function(treeMerger, object2file, SmartHttpRemote, PackIndex, Pack, fileutils, errutils){
+define('commands/conditions',['utils/file_utils', 'utils/errors'],function(fileutils, errutils){
+
+    var conditions = {
+
+        checkForUncommittedChanges : function(dir, store, callback, error){
+            var lastUpdate;
+            var walkDir = function(dir, callback){
+                
+                dir.getMetadata(function(md){
+                    if (md.modificationTime > lastUpdate){
+                        callback(true);
+                        return;
+                    }
+                    fileutils.ls(dir, function(entries){
+                        var changed;
+                        entries.asyncEach(function(entry, done){
+                            if (changed){
+                                done();
+                                return;
+                            }
+
+                            if (entry.isDirectory){
+                                if (entry.name == '.git'){
+                                    done();
+                                    return;
+                                }
+                                entry.getMetadata(function(md){
+                                    walkDir(entry, function(isChanged){
+                                        changed |= isChanged;
+                                        done();
+                                    });
+                                }, done);
+                            }
+                            else{
+                                entry.getMetadata(function(md){
+                                    if (md.modificationTime > lastUpdate){
+                                        changed = true;
+                                    }
+                                    done();
+                                }, done);
+                                
+                            }
+                        },function(){
+                            callback(changed);
+                        });
+                    });
+                });
+            };
+
+            store.getConfig(function(config){
+                // this would mean we have no commits.
+                if (!config.time){
+                    config.time = 1;
+                }
+                lastUpdate = new Date(config.time);
+                walkDir(dir, function(changed){
+                    if (changed){
+                        error({type: errutils.UNCOMMITTED_CHANGES, msg: errutils.UNCOMMITTED_CHANGES_MSG});
+                    }
+                    else{
+                        callback(config);
+                    }
+                });
+            });
+        }
+    }
+    return conditions;
+});
+define('commands/pull',['commands/treemerger', 'commands/object2file', 'commands/conditions', 'formats/smart_http_remote', 'formats/pack_index', 'formats/pack', 'utils/file_utils', 'utils/errors', 'utils/progress_chunker'], function(treeMerger, object2file, Conditions, SmartHttpRemote, PackIndex, Pack, fileutils, errutils, ProgressChunker){
     
 
     var _updateWorkingTree = function (dir, store, fromTree, toTree, success){
@@ -7468,173 +7679,285 @@ define('commands/pull',['commands/treemerger', 'commands/object2file', 'formats/
     
     };
 
-    var checkForUncommittedChanges = function(dir, lastUpdate, callback, error){
-        var walkDir = function(dir, callback){
-            dir.getMetadata(function(md){
-                if (md.modificationTime > lastUpdate){
-                    callback(true);
-                }
-                else{
-                    fileutils.ls(dir, function(entries){
-                        var changed;
-                        entries.asyncEach(function(entry, done){
-                            if (entry.isDirectory){
-                                walkDir(entry, function(isChanged){
-                                    changed |= isChanged;
-                                    done();
-                                });
-                            }
-                            else{
-                                done();
-                            }
-                        },function(){
-                            callback(changed);
-                        });
-                    });
-                }
-            });
-        };
-        walkDir(dir, function(changed){
-            if (changed){
-                error({type: errutils.PULL_UNCOMMITTED_CHANGES, msg: errutils.PULL_UNCOMMITTED_CHANGES_MSG});
-            }
-            else{
-                callback();
-            }
-        });
-    };
+    
 
     var pull = function(options, success, error){
 
         var dir = options.dir,
             store = options.objectStore,
+            username = options.username,
+            password = options.password,
+            progress = options.progress || function(){},
             callback = success,
             ferror = errutils.fileErrorFunc(error);
 
-        mkdirs = fileutils.mkdirs,
-        mkfile = fileutils.mkfile,
+        var mkdirs = fileutils.mkdirs,
+            mkfile = fileutils.mkfile;
 
-        fileutils.readFile(dir, '.git/config.json', 'Text', function(configStr){
-            var repoConfig = JSON.parse(configStr),
-                lastUpdate = new Date(repoConfig.time);
+        var fetchProgress;
+        if (options.progress){
+            var chunker = new ProgressChunker(progress);
+            fetchProgress = chunker.getChunk(20, 0.5);
+        }
+        else{
+            fetchProgress = function(){};
+        }
 
-            checkForUncommittedChanges(dir, lastUpdate, function(){
-                var url = repoConfig.url;
+        progress({pct: 0, msg: 'Checking for uncommitted changes...'});
+        Conditions.checkForUncommittedChanges(dir, store, function(repoConfig){
+            var url = repoConfig.url;
 
-                remote = new SmartHttpRemote(store, "origin", url, error);
-            
-                var nonFastForward = function(){
-                    error({type: errutils.PULL_NON_FAST_FORWARD, msg: errutils.PULL_NON_FAST_FORWARD_MSG});
-                };
+            remote = new SmartHttpRemote(store, "origin", url, username, password, error);
+        
+            var nonFastForward = function(){
+                error({type: errutils.PULL_NON_FAST_FORWARD, msg: errutils.PULL_NON_FAST_FORWARD_MSG});
+            };
 
-                var upToDate = function(){
-                    error({type: errutils.PULL_UP_TO_DATE, msg: errutils.PULL_UP_TO_DATE_MSG});
-                };
+            var upToDate = function(){
+                error({type: errutils.PULL_UP_TO_DATE, msg: errutils.PULL_UP_TO_DATE_MSG});
+            };
 
-                // get the current branch
-                fileutils.readFile(dir, '.git/HEAD', 'Text', function(headStr){
+            // get the current branch
+            fileutils.readFile(dir, '.git/HEAD', 'Text', function(headStr){
+                
+                progress({pct: 10, msg: 'Querying remote git server...'});
+                // get rid of the initial 'ref: ' plus newline at end
+                var headRefName = headStr.substring(5).trim();
+                remote.fetchRefs(function(refs){
+                    var headSha, branchRef, wantRef;
                     
-                    // get rid of the initial 'ref: ' plus newline at end
-                    var headRefName = headStr.substring(5).trim();
-
-                    remote.fetchRefs(function(refs){
-                        var headSha, branchRef, wantRef;
-                        
-                        refs.some(function(ref){
-                            if (ref.name == headRefName){
-                                branchRef = ref;
-                                return true;
-                            }
-                        });
-
-                        if (branchRef){
-                             // see if we know about the branch's head commit if so, we're up to date, if not, request from remote
-                            store._retrieveRawObject(branchRef.sha, 'ArrayBuffer', upToDate, function(){
-                                wantRef = branchRef;
-                                // Get the sha from the ref name 
-                                store._getHeadForRef(branchRef.name, function(sha){
-                                    branchRef.localHead = sha;
-                                    
-                                    store._getCommitGraph([sha], 32, function(commits, nextLevel){
-                                        remote.fetchRef([wantRef], commits, null, nextLevel, function(objects, packData, common){
-                                            // fast forward merge
-                                            if (common.indexOf(wantRef.localHead) != -1){
-                                                var packSha = packData.subarray(packData.length - 20);
-                                                
-                                                var packIdxData = PackIndex.writePackIdx(objects, packSha);
-                                                
-                                                // get a view of the sorted shas
-                                                var sortedShas = new Uint8Array(packIdxData, 4 + 4 + (256 * 4), objects.length * 20);
-                                                packNameSha = Crypto.SHA1(sortedShas);
-                                                
-                                                var packName = 'pack-' + packNameSha;
-                                                mkdirs(store.dir, '.git/objects', function(objectsDir){
-                                                    store.objectsDir = objectsDir;
-                                                    mkfile(objectsDir, 'pack/' + packName + '.pack', packData.buffer);
-                                                    mkfile(objectsDir, 'pack/' + packName + '.idx', packIdxData);
-                                                    
-                                                    var packIdx = new PackIndex(packIdxData);
-                                                    if (!store.packs){
-                                                        store.packs = [];
-                                                    }
-                                                    store.packs.push({pack: new Pack(packData, store), idx: packIdx});
-                                                
-                                                    mkfile(store.dir, '.git/' + wantRef.name, wantRef.sha, function(){
-                                                        store._getTreesFromCommits([wantRef.localHead, wantRef.sha], function(trees){
-                                                            _updateWorkingTree(dir, store, trees[0], trees[1], function(){
-                                                                store.updateLastChange(success);
-                                                            });
-                                                        });
-                                                    }); 
-                                                });
-                                            }
-                                            else{
-                                                // non-fast-forward merge
-                                                nonFastForward();
-                                                // var shas = [wantRef.localHead, common[i], wantRef.sha]
-                                                // store._getTreesFromCommits(shas, function(trees){
-                                                //     treeMerger.mergeTrees(store, trees[0], trees[1], trees[2], function(finalTree){
-                                                //         mkfile(store.dir, '.git/' + wantRef.name, sha, done); 
-                                                //     }, function(e){errors.push(e);done();});
-                                                // });
-                                                
-                                            }
-                                                
-                                            
-                                        }, nonFastForward);
-                                    });
-                                                                 
-                                }, ferror);
-                            }); 
+                    refs.some(function(ref){
+                        if (ref.name == headRefName){
+                            branchRef = ref;
+                            return true;
                         }
-                        else{
-                            error({type: errutils.REMOTE_BRANCH_NOT_FOUND, msg: errutils.REMOTE_BRANCH_NOT_FOUND_MSG});
-                        }        
                     });
-                }, ferror);
-            }, error);
-        }, ferror)
+
+                    if (branchRef){
+                         // see if we know about the branch's head commit if so, we're up to date, if not, request from remote
+                        store._retrieveRawObject(branchRef.sha, 'ArrayBuffer', upToDate, function(){
+                            wantRef = branchRef;
+                            // Get the sha from the ref name 
+                            store._getHeadForRef(branchRef.name, function(sha){
+                                branchRef.localHead = sha;
+                                
+                                store._getCommitGraph([sha], 32, function(commits, nextLevel){
+                                    remote.fetchRef([wantRef], commits, repoConfig.shallow, null, nextLevel, function(objects, packData, common){
+                                        // fast forward merge
+                                        if (common.indexOf(wantRef.localHead) != -1){
+                                            var packSha = packData.subarray(packData.length - 20);
+                                            
+                                            var packIdxData = PackIndex.writePackIdx(objects, packSha);
+                                            
+                                            // get a view of the sorted shas
+                                            var sortedShas = new Uint8Array(packIdxData, 4 + 4 + (256 * 4), objects.length * 20);
+                                            packNameSha = Crypto.SHA1(sortedShas);
+                                            
+                                            var packName = 'pack-' + packNameSha;
+                                            mkdirs(store.dir, '.git/objects', function(objectsDir){
+                                                store.objectsDir = objectsDir;
+                                                mkfile(objectsDir, 'pack/' + packName + '.pack', packData.buffer);
+                                                mkfile(objectsDir, 'pack/' + packName + '.idx', packIdxData);
+                                                
+                                                var packIdx = new PackIndex(packIdxData);
+                                                if (!store.packs){
+                                                    store.packs = [];
+                                                }
+                                                store.packs.push({pack: new Pack(packData, store), idx: packIdx});
+                                            
+                                                mkfile(store.dir, '.git/' + wantRef.name, wantRef.sha, function(){
+                                                    progress({pct: 70, msg: 'Applying fast-forward merge'});
+                                                    store._getTreesFromCommits([wantRef.localHead, wantRef.sha], function(trees){
+                                                        _updateWorkingTree(dir, store, trees[0], trees[1], function(){
+                                                            progress({pct: 99, msg: 'Finishing up'})
+                                                            repoConfig.remoteHeads[branchRef.name] = branchRef.sha;
+                                                            store.updateLastChange(repoConfig, success);
+                                                        });
+                                                    });
+                                                }); 
+                                            });
+                                        }
+                                        else{
+                                            // non-fast-forward merge
+                                            nonFastForward();
+                                            // var shas = [wantRef.localHead, common[i], wantRef.sha]
+                                            // store._getTreesFromCommits(shas, function(trees){
+                                            //     treeMerger.mergeTrees(store, trees[0], trees[1], trees[2], function(finalTree){
+                                            //         mkfile(store.dir, '.git/' + wantRef.name, sha, done); 
+                                            //     }, function(e){errors.push(e);done();});
+                                            // });
+                                            
+                                        }
+                                            
+                                        
+                                    }, nonFastForward, fetchProgress);
+                                });
+                                                             
+                            }, ferror);
+                        }); 
+                    }
+                    else{
+                        error({type: errutils.REMOTE_BRANCH_NOT_FOUND, msg: errutils.REMOTE_BRANCH_NOT_FOUND_MSG});
+                    }        
+                });
+            }, ferror);
+        }, error);
+        
     }
     return pull;
 });
-define('commands/push',['formats/smart_http_remote', 'formats/pack'], function(SmartHttpRemote, Pack){
+define('commands/push',['formats/smart_http_remote', 'formats/pack', 'utils/progress_chunker', 'utils/errors'], function(SmartHttpRemote, Pack, ProgressChunker, errutils){
     var push = function(options, success, error){
         
-        var store = options.objectStore;
+        var store = options.objectStore,
+            username = options.username,
+            password = options.password,
+            progress = options.progress || function(){};
+
+        var remotePushProgress;
+        if (options.progress){
+            var chunker = new ProgressChunker(progress);
+            remotePushProgress = chunker.getChunk(40, .6);
+        }
+        else{
+            remotePushProgress = function(){};
+        }
 
         store.getConfig(function(config){
             var url = config.url || options.url;
-            var remote = new SmartHttpRemote(store, "origin", url, error);
+
+            if (!url){
+                error({type: errutils.PUSH_NO_REMOTE, msg: errutils.PUSH_NO_REMOTE_MSG});
+                return;
+            }
+
+            var remote = new SmartHttpRemote(store, "origin", url, username, password, error);
+            progress({pct:0, msg: 'Contacting server...'});
             remote.fetchReceiveRefs(function(refs){
-                store._getCommitsForPush(refs, function(commits, ref){
+                store._getCommitsForPush(refs, config.remoteHeads, function(commits, ref){
+                    progress({pct: 20, msg: 'Building pack...'});
                     Pack.buildPack(commits, store, function(packData){
-                        remote.pushRefs([ref], packData, success);
+                        progress({pct: 40, msg: 'Sending pack...'});
+                        remote.pushRefs([ref], packData, function(){
+                            config.remoteHeads = config.remoteHeads || {};
+                            config.remoteHeads[ref.name] = ref.head;
+                            config.url = url;
+                            store.setConfig(config, success);
+                        }, remotePushProgress);
                     });
                 }, error);
             });
         });
     }
     return push;
+});
+define('commands/branch',['utils/file_utils', 'utils/errors'], function(fileutils, errutils){
+    
+    var branchRegex = new RegExp("^(?!/|.*([/.]\\.|//|@\\{|\\\\))[^\\x00-\\x20 ~^:?*\\[]+$");
+    
+
+
+    var checkBranchName = function(branchName){
+        if (branchName && branchName.length && branchName.match(branchRegex)){
+            if (branchName.lastIndexOf('.lock') != branchName.length - '.lock'.length &&
+                branchName.charAt(branchName.length - 1) != '.' && 
+                branchName.charAt(branchName.length - 1) != '/' &&
+                branchName.charAt(0) != '.'){
+                return true;
+            }
+        };
+        return false
+    }
+
+    var branch = function(options, success, error){
+        var store = options.objectStore,
+            ferror = errutils.fileErrorFunc(error),
+            branchName = options.branch;
+
+        if (!checkBranchName(branchName)){
+            error({type: errutils.BRANCH_NAME_NOT_VALID, msg: errutils.BRANCH_NAME_NOT_VALID_MSG});
+            return;
+        }
+
+        var branchAlreadyExists = function(){
+            error({type: errutils.BRANCH_ALREADY_EXISTS, msg: errutils.BRANCH_ALREADY_EXISTS_MSG});
+        }
+
+        store._getHeadForRef('refs/heads/' + branchName, branchAlreadyExists, function(e){
+            if (e.code == FileError.NOT_FOUND_ERR){
+                store.getHeadRef(function(refName){
+                    store._getHeadForRef(refName, function(sha){
+                        store.createNewRef('refs/heads/' + branchName, sha, success);
+                    }, ferror);
+                });
+            }
+            else{
+                ferror(e);
+            }
+        });
+    }
+    return branch;
+});
+define('commands/checkout',['commands/object2file', 'commands/conditions', 'utils/file_utils', 'utils/errors'], function(object2file, Conditions, fileutils, errutils){
+    
+    var blowAwayWorkingDir = function(dir, success, error){
+        fileutils.ls(dir, function(entries){
+            entries.asyncEach(function(entry, done){
+                if (entry.isDirectory){
+                    if (entry.name == '.git'){
+                        done();
+                        return;
+                    }
+                    else{
+                        entry.removeRecursively(done, error);
+                    }
+                }
+                else{
+                    entry.remove(done, error);
+                }
+            }, success);
+        }, error)
+    }
+
+    var checkout = function(options, success, error){
+        var dir = options.dir,
+            store = options.objectStore,
+            branch = options.branch,
+            ferror = errutils.fileErrorFunc(error);
+
+        
+        store._getHeadForRef('refs/heads/' + branch, function(branchSha){
+            store.getHeadSha(function(currentSha){
+                if (currentSha != branchSha){
+                    Conditions.checkForUncommittedChanges(dir, store, function(config){
+                        blowAwayWorkingDir(dir, function(){
+                            store._retrieveObject(branchSha, "Commit", function(commit){
+                                var treeSha = commit.tree;
+                                object2file.expandTree(dir, store, treeSha, function(){
+                                    store.setHeadRef('refs/heads/' + branch, function(){
+                                        store.updateLastChange(null, success);
+                                    });
+                                });
+                             });
+                        }, ferror);
+                    }, error);
+                }
+                else{
+                    store.setHeadRef('refs/heads/' + branch, success);
+                }
+            });
+        }, 
+        function(e){
+            if (e.code == FileError.NOT_FOUND_ERR){
+                error({type: errutils.CHECKOUT_BRANCH_NO_EXISTS, msg: CHECKOUT_BRANCH_NO_EXISTS_MSG});
+            }
+            else{
+                ferror(e);
+            }
+        });
+        
+    }
+    return checkout;
 });
 // Underscore.js 1.1.3
 // (c) 2010 Jeremy Ashkenas, DocumentCloud Inc.
@@ -7664,157 +7987,165 @@ return r(this._wrapped,this._chain)}});k(["concat","join","slice"],function(a){v
 
 define("thirdparty/underscore-min", function(){});
 
-define('objectstore/objects',['utils/misc_utils', 'thirdparty/underscore-min'], function(utils){
-  GitObjects = {
-    CONSTRUCTOR_NAMES:{
-      "blob": "Blob", 
-      "tree": "Tree", 
-      "commit": "Commit", "comm": "Commit",
-      "tag": "Tag", "tag ": "Tag"
-    },
-    
-    make: function(sha, type, content) {
-      var constructor = Git.objects[this.CONSTRUCTOR_NAMES[type]]
-      if (constructor) {
-        return new constructor(sha, content)
-      } else {
-        throw("no constructor for " + type)
-      }
-    },
-    
-    Blob: function(sha, data) {
-      this.type = "blob"
-      this.sha = sha
-      this.data = data
-      this.toString = function() {
-        return data
-      }
-    },
-    
-    Tree: function(sha, buf) {
-    	var data = new Uint8Array(buf);
-    	var treeEntries = [];
-    	
-    	var idx = 0;
-    	while (idx < data.length){
-    	    var entryStart = idx;
-    		while(data[idx] != 0){
-    			if (idx >= data.length){
-            throw Error("object is not a tree");
-          }
-          idx++;
-    		}
-    		var isBlob = data[entryStart] == 49; // '1' character
-    		var nameStr = utils.bytesToString(data.subarray(entryStart + (isBlob ? 7 : 6), idx++));
-    		var entry = {
-    			isBlob: isBlob,
-    			name: nameStr,
-    			sha: data.subarray(idx, idx + 20)
-    		};
-    		treeEntries.push(entry);
-    		idx += 20;
-    	}
-    	this.entries = treeEntries;
-    	
-    	var sorter = function(a, b){
-  		var nameA = a.name, nameB = b.name;
-  		if (nameA < nameB) //sort string ascending
-  			return -1; 
-  		if (nameA > nameB)
-  			return 1;
-  		return 0;
-  	}
-  	this.sortEntries = function(){
-  		this.entries.sort(sorter);
-  	}
-    },
-    
-    Commit: function(sha, data) {
-      this.type = "commit"
-      this.sha = sha
-      this.data = data
-      
-      var lines = data.split("\n")
-      this.tree = lines[0].split(" ")[1]
-      var i = 1
-      this.parents = []
-      while (lines[i].slice(0, 6) === "parent") {
-        this.parents.push(lines[i].split(" ")[1])
-        i += 1
-      }
-      
-      var parseAuthor = function(line) {
-        var match = /^(.*) <(.*)> (\d+) (\+|\-)\d\d\d\d$/.exec(line)
-        var result = {}
-        
-        result.name = match[1]
-        result.email = match[2]
-        result.timestamp = parseInt(match[3])
-        result.date = new Date(result.timestamp*1000)
-        return result
-      }
-      
-      var authorLine = lines[i].replace("author ", "")
-      this.author = parseAuthor(authorLine)
-      
-      var committerLine = lines[i + 1].replace("committer ", "")
-      this.committer = parseAuthor(committerLine)
-      
-      if (lines[i + 2].split(" ")[0] == "encoding") {
-        this.encoding = lines[i + 2].split(" ")[1]
-      }
-      this.message = _(lines.slice(i + 2, lines.length)).select(function(line) { return line !== ""}).join("\n")
-      
-      this.toString = function() {
-        var str = "commit " + sha + "\n"
-        str += "Author: " + this.author.name + " <" + this.author.email + ">\n"
-        str += "Date:   " + this.author.date +"\n"
-        str += "\n"
-        str += this.message
-        return str
-      }
-    },
-    
-    Tag: function(sha, data) {
-      this.type = "tag"
-      this.sha = sha
-      this.data = data
-    },
-    
-    RawLooseObject: function(buf){
-    	var header,i,data;
-    	var funcName;
-    	if (buf instanceof ArrayBuffer){
-  		var data = new Uint8Array(buf);
-  		var headChars = [];
-  		i = 0;
-  		for (; i < data.length; i++){
-  			if (data[i] != 0)
-  				headChars.push(String.fromCharCode(data[i]));
-  			else
-  				break;
-  		}
-  		header = headChars.join('');
-  		funcName = 'subarray';
-  	}
-  	else{
-  		data = buf;
-  		i = buf.indexOf('\0');
-  		header = buf.substring(0, i);
-  		funcName = 'substring';
-  	}
-  	var parts = header.split(' ');
-  	this.type = parts[0];
-  	this.size = parseInt(parts[1]);
-  	// move past nul terminator but keep zlib header
-  	this.data = data[funcName](i + 1);
+define('objectstore/objects',['utils/misc_utils', 'thirdparty/underscore-min'], function(utils) {
+    var map = {
+        "commit": 1,
+        "tree": 2,
+        "blob": 3
+    };
+    GitObjects = {
+        CONSTRUCTOR_NAMES: {
+            "blob": "Blob",
+            "tree": "Tree",
+            "commit": "Commit",
+            "comm": "Commit",
+            "tag": "Tag",
+            "tag ": "Tag"
+        },
+
+        make: function(sha, type, content) {
+            var constructor = Git.objects[this.CONSTRUCTOR_NAMES[type]]
+            if (constructor) {
+                return new constructor(sha, content)
+            } else {
+                throw ("no constructor for " + type)
+            }
+        },
+
+        Blob: function(sha, data) {
+            this.type = "blob"
+            this.sha = sha
+            this.data = data
+            this.toString = function() {
+                return data
+            }
+        },
+
+        Tree: function(sha, buf) {
+            var data = new Uint8Array(buf);
+            var treeEntries = [];
+
+            var idx = 0;
+            while (idx < data.length) {
+                var entryStart = idx;
+                while (data[idx] != 0) {
+                    if (idx >= data.length) {
+                        throw Error("object is not a tree");
+                    }
+                    idx++;
+                }
+                var isBlob = data[entryStart] == 49; // '1' character
+                var nameStr = utils.bytesToString(data.subarray(entryStart + (isBlob ? 7 : 6), idx++));
+                nameStr = decodeURIComponent(escape(nameStr));
+                var entry = {
+                    isBlob: isBlob,
+                    name: nameStr,
+                    sha: data.subarray(idx, idx + 20)
+                };
+                treeEntries.push(entry);
+                idx += 20;
+            }
+            this.entries = treeEntries;
+
+            var sorter = function(a, b) {
+                var nameA = a.name,
+                    nameB = b.name;
+                if (nameA < nameB) //sort string ascending
+                    return -1;
+                if (nameA > nameB)
+                    return 1;
+                return 0;
+            }
+            this.sortEntries = function() {
+                this.entries.sort(sorter);
+            }
+        },
+
+        Commit: function(sha, data) {
+            this.type = "commit"
+            this.sha = sha
+            this.data = data
+
+            var lines = data.split("\n")
+            this.tree = lines[0].split(" ")[1]
+            var i = 1
+            this.parents = []
+            while (lines[i].slice(0, 6) === "parent") {
+                this.parents.push(lines[i].split(" ")[1])
+                i += 1
+            }
+
+            var parseAuthor = function(line) {
+                var match = /^(.*) <(.*)> (\d+) (\+|\-)\d\d\d\d$/.exec(line)
+                var result = {}
+
+                result.name = match[1]
+                result.email = match[2]
+                result.timestamp = parseInt(match[3])
+                result.date = new Date(result.timestamp * 1000)
+                return result
+            }
+
+            var authorLine = lines[i].replace("author ", "")
+            this.author = parseAuthor(authorLine)
+
+            var committerLine = lines[i + 1].replace("committer ", "")
+            this.committer = parseAuthor(committerLine)
+
+            if (lines[i + 2].split(" ")[0] == "encoding") {
+                this.encoding = lines[i + 2].split(" ")[1]
+            }
+            this.message = _(lines.slice(i + 2, lines.length)).select(function(line) {
+                return line !== ""
+            }).join("\n")
+
+            this.toString = function() {
+                var str = "commit " + sha + "\n"
+                str += "Author: " + this.author.name + " <" + this.author.email + ">\n"
+                str += "Date:   " + this.author.date + "\n"
+                str += "\n"
+                str += this.message
+                return str
+            }
+        },
+
+        Tag: function(sha, data) {
+            this.type = "tag"
+            this.sha = sha
+            this.data = data
+        },
+
+        RawLooseObject: function(buf) {
+
+            var header, i, data;
+            var funcName;
+            if (buf instanceof ArrayBuffer) {
+                var data = new Uint8Array(buf);
+                var headChars = [];
+                i = 0;
+                for (; i < data.length; i++) {
+                    if (data[i] != 0)
+                        headChars.push(String.fromCharCode(data[i]));
+                    else
+                        break;
+                }
+                header = headChars.join('');
+                funcName = 'subarray';
+            } else {
+                data = buf;
+                i = buf.indexOf('\0');
+                header = buf.substring(0, i);
+                funcName = 'substring';
+            }
+            var parts = header.split(' ');
+            this.type = map[parts[0]];
+            this.size = parseInt(parts[1]);
+            // move past nul terminator but keep zlib header
+            this.data = data[funcName](i + 1);
+        }
     }
-  }
-  return GitObjects;
+    return GitObjects;
 });
-
-
-
 define('objectstore/file_repo',['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc_utils', 'utils/file_utils', 'utils/errors'], function(Pack, PackIndex, GitObjects, utils, fileutils, errutils){
 
 	String.prototype.endsWith = function(suffix){
@@ -7924,7 +8255,7 @@ define('objectstore/file_repo',['formats/pack', 'formats/pack_index', 'objectsto
 			}
 			walkLevel(headShas, callback);
 		},
-		_getCommitsForPush : function(baseRefs, callback, error){
+		_getCommitsForPush : function(baseRefs, remoteHeads, callback, error){
 			
 			// special case of empty remote. 
 			if (baseRefs.length == 1 && baseRefs[0].sha == "0000000000000000000000000000000000000000"){
@@ -7943,11 +8274,18 @@ define('objectstore/file_repo',['formats/pack', 'formats/pack_index', 'objectsto
 					}
 				}
 
-				// Didn't find a remote branch for our local so make a dummy
-				if (!remoteRef){
+				// Didn't find a remote branch for our local so base the commits we 
+				// need to push on what we already know about the remote
+				var newBranch = !remoteRef;
+				var remoteShas = {};
+				if (newBranch){
 					remoteRef = {
 						sha: "0000000000000000000000000000000000000000",
 						name: headRef
+					}
+					for (var remoteHead in remoteHeads){
+						var remoteSha = remoteHeads[remoteHead];
+						remoteShas[remoteSha] = true;
 					}
 				}
 				
@@ -7975,6 +8313,13 @@ define('objectstore/file_repo',['formats/pack', 'formats/pack_index', 'objectsto
 						}
 
 						remoteRef.head = sha;
+						
+						// case of new branch with no new commits
+						if (newBranch && remoteShas[sha]){
+							callback([], remoteRef);
+							return;
+						}
+
 						// we don't support local merge commits so finding commits to push should be a 
 						// matter of looking at a non-branching list of ancestors of the current commit.
 						var commits = [];
@@ -7986,7 +8331,7 @@ define('objectstore/file_repo',['formats/pack', 'formats/pack_index', 'objectsto
 									// therefore we've strayed into somewhere we shouldn't be.
 									nonFastForward();
 								}
-								else if (commit.parents.length == 0 || commit.parents[0] == remoteRef.sha){
+								else if (commit.parents.length == 0 || commit.parents[0] == remoteRef.sha || remoteShas[commit.parents[0]]){
 									callback(commits, remoteRef);
 								}
 								else{
@@ -7995,19 +8340,59 @@ define('objectstore/file_repo',['formats/pack', 'formats/pack_index', 'objectsto
 							}, nonFastForward);
 						}
 						getNextCommit(sha);
+					},
+					function(e){
+						// No commits yet
+						if (e.code == FileError.NOT_FOUND_ERR){
+							error({type: errutils.COMMIT_NO_CHANGES, msg: errutils.COMMIT_NO_CHANGES_MSG});
+						}
+						else{
+							self.fileError(e);
+						}
 					});
 				});
 
 			});
 			
 		},
-
+		createNewRef : function(refName, sha, success){
+			fileutils.mkfile(this.dir, '.git/' + refName, sha + '\n', success, this.fileError);
+		},
+		setHeadRef : function(refName, callback){
+			fileutils.mkfile(this.dir, '.git/HEAD', 'ref: ' + refName + '\n', callback, this.fileError);
+		},
 		getHeadRef : function(callback){
 			fileutils.readFile(this.dir, '.git/HEAD', 'Text', function(headStr){
 				// get rid of the initial 'ref: ' plus newline at end
             	var headRefName = headStr.substring(5).trim();
             	callback(headRefName);
 			},this.fileError);
+		},
+		getHeadSha : function(callback){
+			var self = this;
+			this.getHeadRef(function(ref){
+				self._getHeadForRef(ref, callback, self.fileError);
+			});
+		},
+		getAllHeads : function(callback){
+			var fe = this.fileError;
+			this.dir.getDirectory('.git/refs/heads', {create: false}, function(de){
+				fileutils.ls(de, function(entries){
+					var branches = [];
+					entries.forEach(function(entry){
+						branches.push(entry.name);
+					});
+					callback(branches);
+				}, fe);
+			}, 
+			function(e){
+				if (e.code == FileError.NOT_FOUND_ERR){
+					callback([]);
+				}
+				else{
+					fe(e);
+				}
+			});
 		},
 		_getHeadForRef : function(name, callback, onerror){
 			fileutils.readFile(this.dir, '.git/' + name, 'Text', function(data){callback(data.substring(0, 40));}, onerror) ;	
@@ -8162,7 +8547,7 @@ define('objectstore/file_repo',['formats/pack', 'formats/pack_index', 'objectsto
 		},
 		writeRawObject : function(type, content, callback){
 			var bb = [];//new BlobBuilder();
-			var size = content.byteLength || content.length || content.size;
+			var size = content.byteLength || content.length || content.size || 0;
 			var header = type + ' ' + String(size) ;
 			
 			//var store = header + content;
@@ -8234,16 +8619,26 @@ define('objectstore/file_repo',['formats/pack', 'formats/pack_index', 'objectsto
 				}
 			});
 		},
+		setConfig : function(config, success){
+			var configStr = JSON.stringify(config);
+			fileutils.mkfile(this.dir, '.git/config.json', configStr, success, this.fileError);
+		},
 
-		updateLastChange : function(success){
+		updateLastChange : function(config, success){
 			var dir = this.dir,
+				setConfig = this.setConfig.bind(this);
 				fe = this.fileError;
 
-			this.getConfig(function(config){
+			var doUpdate = function(config){
 				config.time = new Date();
-				var configStr = JSON.stringify(config);
-				fileutils.mkfile(dir, '.git/config.json', configStr, success, fe);
-			});
+				setConfig(config, success);
+			}
+			if (config){
+				doUpdate(config);
+			}
+			else{
+				this.getConfig(doUpdate);
+			}
 		}
 		
 	}
@@ -8363,6 +8758,12 @@ GitLiteWorkerMessages = {
     API_CALL_COMMIT: 7,
     API_CALL_PULL: 8,
     API_CALL_PUSH: 9,
+    API_CALL_CHECKOUT: 12,
+    API_CALL_BRANCH: 14,
+    API_CALL_UNCOMMITTED: 15,
+    API_CALL_CURRENT_BRANCH: 16, 
+    API_CALL_LOCAL_BRANCHES: 17,
+    API_CALL_REMOTE_BRANCHES: 18,
 
     SUCCESS: 10,
     ERROR: 11
@@ -8375,7 +8776,7 @@ define("workers/worker_messages", function(){});
 //     }
 // });
 
-define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', 'commands/push', 'objectstore/file_repo', 'utils/errors', 'thirdparty/2.2.0-sha1', 'thirdparty/crc32', 'thirdparty/deflate.min', 'thirdparty/inflate.min', "workers/worker_messages"], function(clone, commit, init, pull, push, FileObjectStore, errutils){
+define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', 'commands/push', 'commands/branch', 'commands/checkout', 'commands/conditions', 'objectstore/file_repo', 'formats/smart_http_remote', 'utils/errors', 'thirdparty/2.2.0-sha1', 'thirdparty/crc32', 'thirdparty/deflate.min', 'thirdparty/inflate.min', "workers/worker_messages"], function(clone, commit, init, pull, push, branch, checkout, Conditions, FileObjectStore, SmartHttpRemote, errutils){
     
     var api = {
 
@@ -8402,40 +8803,133 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
         // unexpected problem retrieving objects
         OBJECT_STORE_CORRUPTED: errutils.OBJECT_STORE_CORRUPTED,
         // pull is attempted with uncommitted changed
-        PULL_UNCOMMITTED_CHANGES: errutils.PULL_UNCOMMITTED_CHANGES,
+        UNCOMMITTED_CHANGES: errutils.UNCOMMITTED_CHANGES,
+        // 401 when attempting to make a request
+        HTTP_AUTH_ERROR: errutils.HTTP_AUTH_ERROR,
 
+        BRANCH_NAME_NOT_VALID: errutils.BRANCH_NAME_NOT_VALID,
+
+        PUSH_NO_REMOTE: errutils.PUSH_NO_REMOTE,
         
-        init : function(options, success, error){
-            var objectStore = new FileObjectStore(options.dir);
-            init({objectStore: objectStore}, success, error);
-        },
+        // init : function(options, success, error){
+        //     var objectStore = new FileObjectStore(options.dir);
+        //     init({objectStore: objectStore}, success, error);
+        // },
         clone : function(options, success, error){
             var objectStore = new FileObjectStore(options.dir);
             objectStore.init(function(){
-                //clone(dir, objectStore, url, callback);
-                clone({dir: options.dir, branch: options.branch, objectStore: objectStore, url: options.url, depth: options.depth, progress: options.progress}, success, error);
+                
+                clone({
+                        dir: options.dir, 
+                        branch: options.branch, 
+                        objectStore: objectStore, 
+                        url: options.url, 
+                        depth: options.depth, 
+                        progress: options.progress,
+                        username: options.username,
+                        password: options.password
+                    }, 
+                    success, error);
+
             }, error);
         },
         pull : function(options, success, error){
             var objectStore = new FileObjectStore(options.dir);
             objectStore.init(function(){
-                //pull(dir, objectStore, url, callback);
-                pull({dir: options.dir, objectStore: objectStore}, success, error);
+                
+                pull({
+                        dir: options.dir, 
+                        objectStore: objectStore,
+                        username: options.username,
+                        password: options.password,
+                        progress: options.progress
+                    }, 
+                    success, error);
+
             }, error);
         },
         commit : function(options, success, error){
             var objectStore = new FileObjectStore(options.dir);
             objectStore.init(function(){
-                //commit(dir, objectStore, callback);
-                commit({dir: options.dir, username: options.username, email: options.email, commitMsg: options.commitMsg, objectStore: objectStore}, success, error);
+                
+                commit({
+                            dir: options.dir, 
+                            username: options.name, 
+                            email: options.email, 
+                            commitMsg: options.commitMsg, 
+                            objectStore: objectStore
+                        }, success, error);
             }, error);
         },
         push : function(options, success, error){
             var objectStore = new FileObjectStore(options.dir);
             objectStore.init(function(){
-                push({objectStore: objectStore, dir: options.dir, url: options.url}, success, error);
+                push({
+                        objectStore: objectStore, 
+                        dir: options.dir, 
+                        url: options.url,
+                        username: options.username,
+                        password: options.password,
+                        progress: options.progress
+                    }, 
+                    success, error);
             }, error);
+        },
+        branch: function(options, success, error){
+            var objectStore = new FileObjectStore(options.dir);
+            objectStore.init(function(){
+                branch({
+                    objectStore: objectStore,
+                    dir: options.dir,
+                    branch: options.branch
+                }, success, error);
+            }, error);
+
+        },
+        checkout: function(options, success, error){
+            var objectStore = new FileObjectStore(options.dir);
+            objectStore.init(function(){
+                checkout({
+                    objectStore: objectStore,
+                    dir: options.dir,
+                    branch: options.branch
+                }, success, error);
+            }, error);
+        },
+
+        checkForUncommittedChanges: function(options, success, error){
+            var objectStore = new FileObjectStore(options.dir);
+            objectStore.init(function(){
+                Conditions.checkForUncommittedChanges(options.dir, objectStore, success, error);
+            }, error);
+        },
+        getCurrentBranch : function(options, success, error){
+            var objectStore = new FileObjectStore(options.dir);
+            objectStore.init(function(){
+                objectStore.getHeadRef(function(ref){
+                    success(ref.substring('refs/heads/'.length));
+                });
+            }, error);
+        },
+        getLocalBranches : function(options, success, error){
+            var objectStore = new FileObjectStore(options.dir);
+            objectStore.init(function(){
+                objectStore.getAllHeads(success);
+            }, error);
+        },
+        getRemoteBranches : function(options, success, error){
+            var remote = SmartHttpRemote(null, null, options.url, options.username, options.password, error);
+            remote.fetchRefs(function(refs){
+                var remoteBranches = [];
+                refs.forEach(function(ref){
+                    if (ref.name.indexOf('refs/heads/') == 0){
+                        remoteBranches.push(ref.name.substring('refs/heads/'.length));
+                    }
+                });
+                success(remoteBranches);
+            });
         }
+
     }
     return api;
 });
@@ -8499,6 +8993,24 @@ define('workers/api-worker',['api', 'utils/errors', 'workers/worker_messages'], 
                     break;
                 case GitLiteWorkerMessages.API_CALL_PUSH:
                     doApiCall(GitLite.push);
+                    break;
+                case GitLiteWorkerMessages.API_CALL_BRANCH:
+                    doApiCall(GitLite.branch);
+                    break;
+                case GitLiteWorkerMessages.API_CALL_CHECKOUT:
+                    doApiCall(GitLite.checkout);
+                    break;
+                case GitLiteWorkerMessages.API_CALL_UNCOMMITTED:
+                    doApiCall(GitLite.checkForUncommittedChanges);
+                    break;
+                case GitLiteWorkerMessages.API_CALL_CURRENT_BRANCH:
+                    doApiCall(GitLite.getCurrentBranch);
+                    break;
+                case GitLiteWorkerMessages.API_CALL_LOCAL_BRANCHES:
+                    doApiCall(GitLite.getLocalBranches);
+                    break;
+                case GitLiteWorkerMessages.API_CALL_REMOTE_BRANCHES:
+                    doApiCall(GitLite.getRemoteBranches);
                     break;
             }
         }

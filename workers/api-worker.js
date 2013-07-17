@@ -59,6 +59,24 @@ define(['api', 'utils/errors', 'workers/worker_messages'], function(GitLite, err
                 case GitLiteWorkerMessages.API_CALL_PUSH:
                     doApiCall(GitLite.push);
                     break;
+                case GitLiteWorkerMessages.API_CALL_BRANCH:
+                    doApiCall(GitLite.branch);
+                    break;
+                case GitLiteWorkerMessages.API_CALL_CHECKOUT:
+                    doApiCall(GitLite.checkout);
+                    break;
+                case GitLiteWorkerMessages.API_CALL_UNCOMMITTED:
+                    doApiCall(GitLite.checkForUncommittedChanges);
+                    break;
+                case GitLiteWorkerMessages.API_CALL_CURRENT_BRANCH:
+                    doApiCall(GitLite.getCurrentBranch);
+                    break;
+                case GitLiteWorkerMessages.API_CALL_LOCAL_BRANCHES:
+                    doApiCall(GitLite.getLocalBranches);
+                    break;
+                case GitLiteWorkerMessages.API_CALL_REMOTE_BRANCHES:
+                    doApiCall(GitLite.getRemoteBranches);
+                    break;
             }
         }
     }

@@ -18,7 +18,7 @@ define(['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index
             }
             else{
                 fileutils.ls(store.objectsDir, function(entries){
-                    if (entries > 0){
+                    if (entries.length > 0){
                         error({type: errutils.CLONE_GIT_DIR_IN_USE, msg: errutils.CLONE_GIT_DIR_IN_USE_MSG});
                     }
                     else{
@@ -39,15 +39,36 @@ define(['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index
             depth = options.depth,
             branch = options.branch || 'master',
             progress = options.progress,
+            username = options.username,
+            password = options.password,
             ferror = errutils.fileErrorFunc(error);
 
         var mkdirs = fileutils.mkdirs,
             mkfile = fileutils.mkfile,
-            remote = new SmartHttpRemote(store, "origin", url, error);
+            remote = new SmartHttpRemote(store, "origin", url, username, password, error);
+
+        var createInitialConfig = function(shallow, localHeadRef, callback){
+            var config = {url: url, time: new Date()};
+            if (options.depth && shallow){
+                config.shallow = shallow;
+            }
+            config.remoteHeads = {};
+            
+            if (localHeadRef)
+                config.remoteHeads[localHeadRef.name] = localHeadRef.sha;
+
+            store.setConfig(config, callback);  
+        }
 
         checkDirectory(dir, store, function(){ 
             mkdirs(dir, ".git", function(gitDir){
                 remote.fetchRefs(function(refs){
+                    
+                    if (!refs.length){
+                        createInitialConfig(null, null, success);
+                        return;
+                    }
+
                     var remoteHead, remoteHeadRef, localHeadRef;
 
                     _(refs).each(function(ref){
@@ -76,7 +97,7 @@ define(['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index
 
                     mkfile(gitDir, "HEAD", 'ref: ' + localHeadRef.name + '\n', function(){
                         mkfile(gitDir, localHeadRef.name, localHeadRef.sha + '\n', function(){
-                            remote.fetchRef([localHeadRef], null, depth, null, function(objects, packData){
+                            remote.fetchRef([localHeadRef], null, null, depth, null, function(objects, packData, common, shallow){
                                 var packSha = packData.subarray(packData.length - 20);
                                 
                                 var packIdxData = PackIndex.writePackIdx(objects, packSha);
@@ -93,8 +114,7 @@ define(['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index
                                     var packIdx = new PackIndex(packIdxData);
                                     store.loadWith(objectsDir, [{pack: new Pack(packData, self), idx: packIdx}]);
                                     _createCurrentTreeFromPack(dir, store, localHeadRef.sha, function(){
-                                        var config = {url: url, time: new Date()};
-                                        mkfile(gitDir, 'config.json', JSON.stringify(config), callback, ferror);    
+                                        createInitialConfig(shallow, localHeadRef, callback);
                                     });
                                 }, ferror); 
                             }, null, progress);

@@ -3,8 +3,10 @@ define(function() {
     var errors = {
         // Indicates an unexpected error in the file system.
         FILE_IO_ERROR: 0,
+        FILE_IO_ERROR_MSG: 'Unexpected File I/O error',
         // Indicates an unexpected ajax error when trying to make a request
         AJAX_ERROR: 1, 
+        AJAX_ERROR_MSG: 'Unexpected ajax error',
         
         // trying to clone into a non-empty directory
         CLONE_DIR_NOT_EMPTY: 2,
@@ -26,8 +28,9 @@ define(function() {
         PULL_UP_TO_DATE: 7,
         PULL_UP_TO_DATE_MSG: 'Everything is up to date',
 
-        PULL_UNCOMMITTED_CHANGES: 11,
-        PULL_UNCOMMITTED_CHANGES_MSG: 'There are changes in the working directory that haven\'t been committed',
+
+        UNCOMMITTED_CHANGES: 11,
+        UNCOMMITTED_CHANGES_MSG: 'There are changes in the working directory that haven\'t been committed',
 
         // Nothing to commit
         COMMIT_NO_CHANGES: 8,
@@ -36,14 +39,32 @@ define(function() {
         // The remote repo and the local repo share the same head.
         PUSH_NO_CHANGES: 9,
         PUSH_NO_CHANGES_MSG: 'No new commits to push to the repository',
+
+        PUSH_NO_REMOTE: 16,
+        PUSH_NO_REMOTE_MSG: 'No remote to push to',
+
         // Need to merge remote changes first. 
         PUSH_NON_FAST_FORWARD: 10,
         PUSH_NON_FAST_FORWARD_MSG: 'The remote repo has new commits on your current branch. You need to merge them first.',
 
+        BRANCH_ALREADY_EXISTS: 14,
+        BRANCH_ALREADY_EXISTS_MSG: 'A local branch with that name already exists',
+
+        BRANCH_NAME_NOT_VALID: 12,
+        BRANCH_NAME_NOT_VALID_MSG: 'The branch name is not valid.',
+
+        CHECKOUT_BRANCH_NO_EXISTS: 15,
+        CHECKOUT_BRANCH_NO_EXISTS_MSG: 'No local branch with that name exists',
 
         // unexpected problem retrieving objects
         OBJECT_STORE_CORRUPTED: 200,
         OBJECT_STORE_CORRUPTED_MSG: 'Git object store may be corrupted',
+
+        HTTP_AUTH_ERROR: 201,
+        HTTP_AUTH_ERROR_MSG: 'Http authentication failed',
+
+        UNPACK_ERROR: 202,
+        UNPACK_ERROR_MSG: 'The remote git server wasn\'t able to understand the push request.',
 
         
         fileErrorFunc : function(onError){
@@ -57,11 +78,19 @@ define(function() {
         },
 
         ajaxErrorFunc : function(onError){
-            return function(xhr, status, errorThrown){
+            return function(xhr){
                 var url = this.url,
                     reqType = this.type;
 
-                onError({type: errors.AJAX_ERROR, url: url, reqType: reqType, status: status, errorThrown: errorThrown});  
+                var httpErr;
+                if (xhr.status == 401){
+                    var auth = xhr.getResponseHeader('WWW-Authenticate');
+                    httpErr = {type: errors.HTTP_AUTH_ERROR, msg: errors.HTTP_AUTH_ERROR_MSG, auth: auth};
+                }
+                else{
+                    httpErr = {type: errors.AJAX_ERROR, url: url, reqType: reqType, statusText: xhr.statusText, status: xhr.status};
+                }
+                onError(httpErr);  
             }
         },
 

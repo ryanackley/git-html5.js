@@ -5,7 +5,7 @@ define(['text!workers/api-worker-built.js', 'utils/errors', 'workers/worker_mess
     var newResponseHandler = function(success, error, progress, worker){
         var updateProgress = function(){}
         if (progress){
-            updateProgress = function(){
+            updateProgress = function(msg){
                 progress.apply(null, msg.args || []);
             }
         }
@@ -24,7 +24,7 @@ define(['text!workers/api-worker-built.js', 'utils/errors', 'workers/worker_mess
                     //worker.terminate();
                     break;
                 case GitLiteWorkerMessages.PROGRESS:
-                    updateProgress();
+                    updateProgress(msg);
                     break;
             }
         }
@@ -45,6 +45,9 @@ define(['text!workers/api-worker-built.js', 'utils/errors', 'workers/worker_mess
             }
         }
         callbacks[id] = newResponseHandler(success, error, options.progress);
+        if (options.progress){
+            options.progress = true;
+        }
         worker.postMessage({id: id++, type: type, options: options});
     }
 
@@ -73,7 +76,13 @@ define(['text!workers/api-worker-built.js', 'utils/errors', 'workers/worker_mess
         // unexpected problem retrieving objects
         OBJECT_STORE_CORRUPTED: errutils.OBJECT_STORE_CORRUPTED,
         // pull is attempted with uncommitted changed
-        PULL_UNCOMMITTED_CHANGES: errutils.PULL_UNCOMMITTED_CHANGES,
+        UNCOMMITTED_CHANGES: errutils.UNCOMMITTED_CHANGES,
+        // 401 when attempting to make a request
+        HTTP_AUTH_ERROR: errutils.HTTP_AUTH_ERROR,
+
+        BRANCH_NAME_NOT_VALID: errutils.BRANCH_NAME_NOT_VALID,
+
+        PUSH_NO_REMOTE: errutils.PUSH_NO_REMOTE,
 
         
         clone : function(options, success, error){
@@ -108,6 +117,25 @@ define(['text!workers/api-worker-built.js', 'utils/errors', 'workers/worker_mess
             //     push({objectStore: objectStore, dir: options.dir, url: options.url}, success, error);
             // }, error);
             doApiCall(GitLiteWorkerMessages.API_CALL_PUSH, options, success, error);
+        },
+
+        branch : function(options, success, error){
+            doApiCall(GitLiteWorkerMessages.API_CALL_BRANCH, options, success, error);
+        },
+        checkout : function(options, success, error){
+            doApiCall(GitLiteWorkerMessages.API_CALL_CHECKOUT, options, success, error);
+        },
+        checkForUncommittedChanges: function(options, success, error){
+            doApiCall(GitLiteWorkerMessages.API_CALL_UNCOMMITTED, options, success, error);
+        },
+        getCurrentBranch : function(options, success, error){
+            doApiCall(GitLiteWorkerMessages.API_CALL_CURRENT_BRANCH, options, success, error);
+        },
+        getLocalBranches : function(options, success, error){
+            doApiCall(GitLiteWorkerMessages.API_CALL_LOCAL_BRANCHES, options, success, error);
+        },
+        getRemoteBranches : function(options, success, error){
+            doApiCall(GitLiteWorkerMessages.API_CALL_REMOTE_BRANCHES, options, success, error);
         }
     }
     return api;

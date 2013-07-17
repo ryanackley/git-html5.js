@@ -107,7 +107,7 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 			}
 			walkLevel(headShas, callback);
 		},
-		_getCommitsForPush : function(baseRefs, callback, error){
+		_getCommitsForPush : function(baseRefs, remoteHeads, callback, error){
 			
 			// special case of empty remote. 
 			if (baseRefs.length == 1 && baseRefs[0].sha == "0000000000000000000000000000000000000000"){
@@ -126,11 +126,18 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 					}
 				}
 
-				// Didn't find a remote branch for our local so make a dummy
-				if (!remoteRef){
+				// Didn't find a remote branch for our local so base the commits we 
+				// need to push on what we already know about the remote
+				var newBranch = !remoteRef;
+				var remoteShas = {};
+				if (newBranch){
 					remoteRef = {
 						sha: "0000000000000000000000000000000000000000",
 						name: headRef
+					}
+					for (var remoteHead in remoteHeads){
+						var remoteSha = remoteHeads[remoteHead];
+						remoteShas[remoteSha] = true;
 					}
 				}
 				
@@ -158,6 +165,13 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 						}
 
 						remoteRef.head = sha;
+						
+						// case of new branch with no new commits
+						if (newBranch && remoteShas[sha]){
+							callback([], remoteRef);
+							return;
+						}
+
 						// we don't support local merge commits so finding commits to push should be a 
 						// matter of looking at a non-branching list of ancestors of the current commit.
 						var commits = [];
@@ -169,7 +183,7 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 									// therefore we've strayed into somewhere we shouldn't be.
 									nonFastForward();
 								}
-								else if (commit.parents.length == 0 || commit.parents[0] == remoteRef.sha){
+								else if (commit.parents.length == 0 || commit.parents[0] == remoteRef.sha || remoteShas[commit.parents[0]]){
 									callback(commits, remoteRef);
 								}
 								else{
@@ -178,19 +192,59 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 							}, nonFastForward);
 						}
 						getNextCommit(sha);
+					},
+					function(e){
+						// No commits yet
+						if (e.code == FileError.NOT_FOUND_ERR){
+							error({type: errutils.COMMIT_NO_CHANGES, msg: errutils.COMMIT_NO_CHANGES_MSG});
+						}
+						else{
+							self.fileError(e);
+						}
 					});
 				});
 
 			});
 			
 		},
-
+		createNewRef : function(refName, sha, success){
+			fileutils.mkfile(this.dir, '.git/' + refName, sha + '\n', success, this.fileError);
+		},
+		setHeadRef : function(refName, callback){
+			fileutils.mkfile(this.dir, '.git/HEAD', 'ref: ' + refName + '\n', callback, this.fileError);
+		},
 		getHeadRef : function(callback){
 			fileutils.readFile(this.dir, '.git/HEAD', 'Text', function(headStr){
 				// get rid of the initial 'ref: ' plus newline at end
             	var headRefName = headStr.substring(5).trim();
             	callback(headRefName);
 			},this.fileError);
+		},
+		getHeadSha : function(callback){
+			var self = this;
+			this.getHeadRef(function(ref){
+				self._getHeadForRef(ref, callback, self.fileError);
+			});
+		},
+		getAllHeads : function(callback){
+			var fe = this.fileError;
+			this.dir.getDirectory('.git/refs/heads', {create: false}, function(de){
+				fileutils.ls(de, function(entries){
+					var branches = [];
+					entries.forEach(function(entry){
+						branches.push(entry.name);
+					});
+					callback(branches);
+				}, fe);
+			}, 
+			function(e){
+				if (e.code == FileError.NOT_FOUND_ERR){
+					callback([]);
+				}
+				else{
+					fe(e);
+				}
+			});
 		},
 		_getHeadForRef : function(name, callback, onerror){
 			fileutils.readFile(this.dir, '.git/' + name, 'Text', function(data){callback(data.substring(0, 40));}, onerror) ;	
@@ -345,7 +399,7 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 		},
 		writeRawObject : function(type, content, callback){
 			var bb = [];//new BlobBuilder();
-			var size = content.byteLength || content.length || content.size;
+			var size = content.byteLength || content.length || content.size || 0;
 			var header = type + ' ' + String(size) ;
 			
 			//var store = header + content;
@@ -417,16 +471,26 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 				}
 			});
 		},
+		setConfig : function(config, success){
+			var configStr = JSON.stringify(config);
+			fileutils.mkfile(this.dir, '.git/config.json', configStr, success, this.fileError);
+		},
 
-		updateLastChange : function(success){
+		updateLastChange : function(config, success){
 			var dir = this.dir,
+				setConfig = this.setConfig.bind(this);
 				fe = this.fileError;
 
-			this.getConfig(function(config){
+			var doUpdate = function(config){
 				config.time = new Date();
-				var configStr = JSON.stringify(config);
-				fileutils.mkfile(dir, '.git/config.json', configStr, success, fe);
-			});
+				setConfig(config, success);
+			}
+			if (config){
+				doUpdate(config);
+			}
+			else{
+				this.getConfig(doUpdate);
+			}
 		}
 		
 	}

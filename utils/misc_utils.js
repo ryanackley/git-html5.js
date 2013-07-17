@@ -82,8 +82,12 @@ define(['thirdparty/inflate.min', 'thirdparty/deflate.min'], function(){
             }
             return 0;
         },
-        inflate: function(data){
-            var inflate = new Zlib.Inflate(data);
+        inflate: function(data, expectedLength){
+            var options;
+            if (expectedLength){
+              options = {bufferSize: expectedLength};
+            } 
+            var inflate = new Zlib.Inflate(data, options);
             inflate.verify = true;
             var out = inflate.decompress();
             out.compressedLength = inflate.ip;

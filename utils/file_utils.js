@@ -30,8 +30,15 @@ define(['utils/misc_utils'], function(utils){
 			root.getFile(filename, {create:true}, function(fileEntry){
 				fileEntry.createWriter(function(writer){
 					writer.onwriteend = function(){
-						if (callback)
+						// strange piece of the FileWriter api. Writing to an 
+						// existing file just overwrites content in place. Still need to truncate
+						// which triggers onwritend event...again. o_O
+						if (writer.position < writer.length){
+							writer.truncate(writer.position);	
+						}
+						else if (callback)
 							callback(fileEntry);
+
 					}
 					if (contents instanceof ArrayBuffer){
 						contents = new Uint8Array(contents);
