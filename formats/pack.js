@@ -467,39 +467,45 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils', 'thirdparty
             } else {
                 visited[treeSha] = true;
             }
-            
 
-            repo._retrieveObject(treeSha, 'Tree', function(tree, rawObj) {
-                var childCount = {
-                    x: 0
-                };
-                var handleCallback = function() {
-                    childCount.x++;
-                    if (childCount.x == tree.entries.length) {
-                        packIt(rawObj);
-                        callback();
+            var packTree = function(){
+                repo._retrieveObject(treeSha, 'Tree', function(tree, rawObj) {
+                    var childCount = {
+                        x: 0
+                    };
+                    var handleCallback = function() {
+                        childCount.x++;
+                        if (childCount.x == tree.entries.length) {
+                            packIt(rawObj);
+                            callback();
+                        }
                     }
-                }
 
-                for (var i = 0; i < tree.entries.length; i++) {
-                    var nextSha = utils.convertBytesToSha(tree.entries[i].sha);
-                    if (tree.entries[i].isBlob) {
-                        if (visited[nextSha]) {
-                            handleCallback();
+                    for (var i = 0; i < tree.entries.length; i++) {
+                        var nextSha = utils.convertBytesToSha(tree.entries[i].sha);
+                        if (tree.entries[i].isBlob) {
+                            if (visited[nextSha]) {
+                                handleCallback();
+                            } else {
+                                visited[nextSha] = true;
+                                repo._findPackedObject(tree.entries[i].sha, handleCallback, function(){
+                                    repo._retrieveRawObject(nextSha, 'Raw', function(object) {
+                                        packIt(object);
+                                        handleCallback();
+                                    });
+                                });
+                            }
                         } else {
-                            visited[nextSha] = true;
-                            repo._retrieveRawObject(nextSha, 'Raw', function(object) {
-                                packIt(object);
+                            walkTree(nextSha, function() {
                                 handleCallback();
                             });
                         }
-                    } else {
-                        walkTree(nextSha, function() {
-                            handleCallback();
-                        });
                     }
-                }
-            });
+                });
+            }
+            var shaBytes = utils.convertShaToBytes(treeSha);
+            // assumes that if it's packed, the remote knows about the object since all stored packs came from the remote.
+            repo._findPackedObject(shaBytes, callback, packTree);
         }
 
         if (commits.length == 0){

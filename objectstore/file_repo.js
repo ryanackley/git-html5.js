@@ -307,11 +307,12 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 			 });
 		},
 		_retrieveBlobsAsStrings : function(shas, callback){
-			var blobs =[],
+			var blobs =new Array(shas.length),
 				self = this;
-			shas.asyncEach(function(sha, done){
+				
+			shas.asyncEach(function(sha, done, i){
 				self._retrieveRawObject(sha, 'Text', function(object){
-					blobs.push(new GitObjects.Blob(sha, object.data));
+					blobs[i] = new GitObjects.Blob(sha, object.data);
 					done();
 				 });
 			},
@@ -320,12 +321,12 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 			});
 		},
 		_retrieveObjectList : function(shas, objType, callback){
-			var objects = [],
+			var objects = new Array(shas.length),
 				self = this;
 				
-			shas.asyncEach(function(sha, done){
+			shas.asyncEach(function(sha, done, i){
 				self._retrieveObject(sha, objType, function(obj){
-					objects.push(obj);
+					objects[i] = obj;
 					done();
 				});
 			},

@@ -40,6 +40,9 @@ define(['utils/misc_utils'], function(utils){
 							callback(fileEntry);
 
 					}
+					writer.onerror = function(e){
+						throw(e);
+					}
 					if (contents instanceof ArrayBuffer){
 						contents = new Uint8Array(contents);
 					}

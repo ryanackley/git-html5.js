@@ -5468,6 +5468,9 @@ define('utils/file_utils',['utils/misc_utils'], function(utils){
 							callback(fileEntry);
 
 					}
+					writer.onerror = function(e){
+						throw(e);
+					}
 					if (contents instanceof ArrayBuffer){
 						contents = new Uint8Array(contents);
 					}
@@ -6177,39 +6180,45 @@ define('formats/pack',['objectstore/delta', 'utils/misc_utils', 'utils/file_util
             } else {
                 visited[treeSha] = true;
             }
-            
 
-            repo._retrieveObject(treeSha, 'Tree', function(tree, rawObj) {
-                var childCount = {
-                    x: 0
-                };
-                var handleCallback = function() {
-                    childCount.x++;
-                    if (childCount.x == tree.entries.length) {
-                        packIt(rawObj);
-                        callback();
+            var packTree = function(){
+                repo._retrieveObject(treeSha, 'Tree', function(tree, rawObj) {
+                    var childCount = {
+                        x: 0
+                    };
+                    var handleCallback = function() {
+                        childCount.x++;
+                        if (childCount.x == tree.entries.length) {
+                            packIt(rawObj);
+                            callback();
+                        }
                     }
-                }
 
-                for (var i = 0; i < tree.entries.length; i++) {
-                    var nextSha = utils.convertBytesToSha(tree.entries[i].sha);
-                    if (tree.entries[i].isBlob) {
-                        if (visited[nextSha]) {
-                            handleCallback();
+                    for (var i = 0; i < tree.entries.length; i++) {
+                        var nextSha = utils.convertBytesToSha(tree.entries[i].sha);
+                        if (tree.entries[i].isBlob) {
+                            if (visited[nextSha]) {
+                                handleCallback();
+                            } else {
+                                visited[nextSha] = true;
+                                repo._findPackedObject(tree.entries[i].sha, handleCallback, function(){
+                                    repo._retrieveRawObject(nextSha, 'Raw', function(object) {
+                                        packIt(object);
+                                        handleCallback();
+                                    });
+                                });
+                            }
                         } else {
-                            visited[nextSha] = true;
-                            repo._retrieveRawObject(nextSha, 'Raw', function(object) {
-                                packIt(object);
+                            walkTree(nextSha, function() {
                                 handleCallback();
                             });
                         }
-                    } else {
-                        walkTree(nextSha, function() {
-                            handleCallback();
-                        });
                     }
-                }
-            });
+                });
+            }
+            var shaBytes = utils.convertShaToBytes(treeSha);
+            // assumes that if it's packed, the remote knows about the object since all stored packs came from the remote.
+            repo._findPackedObject(shaBytes, callback, packTree);
         }
 
         if (commits.length == 0){
@@ -7079,7 +7088,7 @@ define('formats/pack_index',[],function(){
 });
 
 
-define('commands/clone',['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index', 'formats/pack', 'utils/file_utils', 'utils/errors'], function(object2file, SmartHttpRemote, PackIndex, Pack, fileutils, errutils){
+define('commands/clone',['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index', 'formats/pack', 'utils/file_utils', 'utils/errors', 'utils/progress_chunker'], function(object2file, SmartHttpRemote, PackIndex, Pack, fileutils, errutils, ProgressChunker){
     
     var _createCurrentTreeFromPack = function(dir, store, headSha, callback){
          store._retrieveObject(headSha, "Commit", function(commit){
@@ -7119,10 +7128,13 @@ define('commands/clone',['commands/object2file', 'formats/smart_http_remote', 'f
             callback = success,
             depth = options.depth,
             branch = options.branch || 'master',
-            progress = options.progress,
+            progress = options.progress || function(){},
             username = options.username,
             password = options.password,
             ferror = errutils.fileErrorFunc(error);
+    
+        var chunker = new ProgressChunker(progress);
+        var packProgress = chunker.getChunk(0, .95);
 
         var mkdirs = fileutils.mkdirs,
             mkfile = fileutils.mkfile,
@@ -7194,11 +7206,12 @@ define('commands/clone',['commands/object2file', 'formats/smart_http_remote', 'f
                                     
                                     var packIdx = new PackIndex(packIdxData);
                                     store.loadWith(objectsDir, [{pack: new Pack(packData, self), idx: packIdx}]);
+                                    progress({pct: 95, msg: "Building file tree from pack. Be patient..."});
                                     _createCurrentTreeFromPack(dir, store, localHeadRef.sha, function(){
                                         createInitialConfig(shallow, localHeadRef, callback);
                                     });
                                 }, ferror); 
-                            }, null, progress);
+                            }, null, packProgress);
                         }, ferror);
                     }, ferror);
                 });
@@ -8468,12 +8481,12 @@ define('objectstore/file_repo',['formats/pack', 'formats/pack_index', 'objectsto
 			});
 		},
 		_retrieveObjectList : function(shas, objType, callback){
-			var objects = [],
+			var objects = new Array(shas.length),
 				self = this;
 				
-			shas.asyncEach(function(sha, done){
+			shas.asyncEach(function(sha, done, i){
 				self._retrieveObject(sha, objType, function(obj){
-					objects.push(obj);
+					objects[i] = obj;
 					done();
 				});
 			},

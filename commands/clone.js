@@ -1,4 +1,4 @@
-define(['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index', 'formats/pack', 'utils/file_utils', 'utils/errors'], function(object2file, SmartHttpRemote, PackIndex, Pack, fileutils, errutils){
+define(['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index', 'formats/pack', 'utils/file_utils', 'utils/errors', 'utils/progress_chunker'], function(object2file, SmartHttpRemote, PackIndex, Pack, fileutils, errutils, ProgressChunker){
     
     var _createCurrentTreeFromPack = function(dir, store, headSha, callback){
          store._retrieveObject(headSha, "Commit", function(commit){
@@ -38,10 +38,13 @@ define(['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index
             callback = success,
             depth = options.depth,
             branch = options.branch || 'master',
-            progress = options.progress,
+            progress = options.progress || function(){},
             username = options.username,
             password = options.password,
             ferror = errutils.fileErrorFunc(error);
+    
+        var chunker = new ProgressChunker(progress);
+        var packProgress = chunker.getChunk(0, .95);
 
         var mkdirs = fileutils.mkdirs,
             mkfile = fileutils.mkfile,
@@ -113,11 +116,12 @@ define(['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index
                                     
                                     var packIdx = new PackIndex(packIdxData);
                                     store.loadWith(objectsDir, [{pack: new Pack(packData, self), idx: packIdx}]);
+                                    progress({pct: 95, msg: "Building file tree from pack. Be patient..."});
                                     _createCurrentTreeFromPack(dir, store, localHeadRef.sha, function(){
                                         createInitialConfig(shallow, localHeadRef, callback);
                                     });
                                 }, ferror); 
-                            }, null, progress);
+                            }, null, packProgress);
                         }, ferror);
                     }, ferror);
                 });
