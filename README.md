@@ -17,7 +17,7 @@ To test the API, I ported Adobe's brackets code editor to a Chrome packaged app.
 
 The repo includes a built version of the api. Download [api-built.js](https://raw.github.com/ryanackley/git-html5.js/master/api-built.js).
 
-## Building yourself
+## Building
 
 You can also clone the repo and build it yourself. You'll need [Grunt](http://gruntjs.com/).
 
@@ -117,3 +117,6 @@ GitApi.branch({dir: projectHome, branch: 'testBranch'}, function(){
 });
 ``` 
 
+## Complete API documentation
+
+See the [JSDoc generated documentation](http://ryanackley.github.io/git-html5.js/module-GitApi.html)
