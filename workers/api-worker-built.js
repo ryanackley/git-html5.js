@@ -6437,7 +6437,7 @@ define('utils/errors',[],function() {
                     httpErr = {type: errors.HTTP_AUTH_ERROR, msg: errors.HTTP_AUTH_ERROR_MSG, auth: auth};
                 }
                 else{
-                    httpErr = {type: errors.AJAX_ERROR, url: url, reqType: reqType, statusText: xhr.statusText, status: xhr.status};
+                    httpErr = {type: errors.AJAX_ERROR, url: url, reqType: reqType, statusText: xhr.statusText, status: xhr.status, msg: "Http error with status code: " + xhr.status + ' and status text: "' + xhr.statusText + '"'};
                 }
                 onError(httpErr);  
             }
@@ -6649,6 +6649,14 @@ define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors'
                     }
                 }
             }
+            
+
+            var xhr2ErrorShim = function(){
+                var obj = {url: url, type: 'POST'};
+                ajaxErrorHandler.call(obj, xhr); 
+            }
+            xhr.onerror = xhr2ErrorShim;
+            xhr.onabort = xhr2ErrorShim;
             xhr.send();
         }
         this.fetchRefs = function(callback) {
@@ -7108,8 +7116,25 @@ define('commands/clone',['commands/object2file', 'formats/smart_http_remote', 'f
             }
             else{
                 fileutils.ls(store.objectsDir, function(entries){
-                    if (entries.length > 0){
+                    if (entries.length > 1){
                         error({type: errutils.CLONE_GIT_DIR_IN_USE, msg: errutils.CLONE_GIT_DIR_IN_USE_MSG});
+                    }
+                    else if (entries.length == 1){
+                        if (entries[0].name == "pack"){
+                            store.objectsDir.getDirectory('pack', {create: false}, function(packDir){
+                                fileutils.ls(packDir, function(entries){
+                                    if (entries.length > 0){
+                                        error({type: errutils.CLONE_GIT_DIR_IN_USE, msg: errutils.CLONE_GIT_DIR_IN_USE_MSG});
+                                    }
+                                    else{
+                                        success();
+                                    }
+                                }, ferror);
+                            }, success);
+                        }
+                        else{
+                            error({type: errutils.CLONE_GIT_DIR_IN_USE, msg: errutils.CLONE_GIT_DIR_IN_USE_MSG});
+                        }
                     }
                     else{
                         success();
@@ -8468,11 +8493,12 @@ define('objectstore/file_repo',['formats/pack', 'formats/pack_index', 'objectsto
 			 });
 		},
 		_retrieveBlobsAsStrings : function(shas, callback){
-			var blobs =[],
+			var blobs =new Array(shas.length),
 				self = this;
-			shas.asyncEach(function(sha, done){
+				
+			shas.asyncEach(function(sha, done, i){
 				self._retrieveRawObject(sha, 'Text', function(object){
-					blobs.push(new GitObjects.Blob(sha, object.data));
+					blobs[i] = new GitObjects.Blob(sha, object.data);
 					done();
 				 });
 			},

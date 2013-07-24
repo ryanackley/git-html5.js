@@ -2,22 +2,22 @@
                     "http://www.w3.org/TR/html4/loose.dtd">
 <html>
 <head>
-  <script src="thirdparty/jquery-1.6.2.min.js"></script>
-  <link rel="stylesheet" href="tests/qunit.css" type="text/css" media="screen" />
-<script type="text/javascript" src="tests/qunit.js"></script>
+  <script src="../thirdparty/jquery-1.6.2.min.js"></script>
+  <link rel="stylesheet" href="qunit.css" type="text/css" media="screen" />
+<script type="text/javascript" src="qunit.js"></script>
 <!-- <embed type="application/x-npapifileioforchrome" id="pluginId" style="position:absolute; top:0px;left:-10000px;width:5px;height:5px;">
  --><!--<script src="../../initNativeFS.js"></script>-->
 <!-- <script type="text/javascript" src="thirdparty/inflate.min.js"></script>
 <script type="text/javascript" src="thirdparty/deflate.min.js"></script>
 <script type="text/javascript" src="thirdparty/crc32.js"></script> -->
 <!-- <script type="text/javascript" src="formats/remote.js"></script> -->
-<script type="text/javascript" src="thirdparty/underscore-min.js"></script>
+<script type="text/javascript" src="../thirdparty/underscore-min.js"></script>
 <!-- <script type="text/javascript" src="thirdparty/2.2.0-sha1.js"></script> -->
 
 <!-- <script type="text/javascript" src="commands/treemerger.js"></script>
 <script type="text/javascript" src="commands/commands.js"></script> -->
-<script src="api-built.js"></script>
-<script type="text/javascript" src="thirdparty/require.js"></script>
+<script src="../api-built.js"></script>
+<script type="text/javascript" src="../thirdparty/require.js"></script>
 <script src="gitTests.js">
   
   
@@ -25,9 +25,19 @@
   
 </head>
 <body>
-    <form id="auth-form">
-    <input type="text" id="username" name="username"/>
-    <input type="password" id="password" name="password" />
+    <form id="repo-form">
+    <div>
+      <label>Test repo url</label>
+      <input type="text" id="url" name="url"/>
+    </div>
+    <div>
+      <label>Email to put on commits</label>
+      <input type="text" id="commitEmail"/>
+    </div>
+    <div>
+      <label>Name to put on commits</label>
+      <input type="text" id="commitName" />
+    </div>
     <input type="submit" name="submit" value="Start Tests" />
 </form>
   <h1 id="qunit-header">QUnit example</h1>

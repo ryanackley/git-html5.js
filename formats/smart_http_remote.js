@@ -132,6 +132,14 @@ define(['formats/upload_pack_parser', 'utils/errors', 'utils/progress_chunker'],
                     }
                 }
             }
+            
+
+            var xhr2ErrorShim = function(){
+                var obj = {url: url, type: 'POST'};
+                ajaxErrorHandler.call(obj, xhr); 
+            }
+            xhr.onerror = xhr2ErrorShim;
+            xhr.onabort = xhr2ErrorShim;
             xhr.send();
         }
         this.fetchRefs = function(callback) {

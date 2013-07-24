@@ -4,7 +4,7 @@ window.requestFileSystem  = window.requestFileSystem || window.webkitRequestFile
 String.prototype.endsWith = function(suffix){
     return this.lastIndexOf(suffix) == (this.length - suffix.length);
 }
-
+requirejs.config({baseUrl: "../"});
 var fail = function(msg, callback){
         return function(){
             ok(false, msg);
@@ -190,7 +190,7 @@ $(document).ready(function(){
         });
     });
     
-    var knownRepoUrl = /*'http://localhost:8080/GitServerTest/git/testDir';*/ 'https://github.com/ryanackley/GitTest.git'/*'http://admin@localhost:7990/scm/git/gittest.git'*//*'https://ryanackley@bitbucket.org/ryanackley/gittest.git'*/;
+    //var knownRepoUrl = /*'http://localhost:8080/GitServerTest/git/testDir';*/ 'https://github.com/ryanackley/GitTest.git'/*'http://admin@localhost:7990/scm/git/gittest.git'*//*'https://ryanackley@bitbucket.org/ryanackley/gittest.git'*/;
         
         module("Basic Git FileSystem API Tests", {setup: testSetup, teardown:testTeardown});
         
@@ -214,16 +214,16 @@ $(document).ready(function(){
                 //     });
                 // });
                 //GitLite.init({dir: testDir}, function(){
-                    GitLite.commit({dir:testDir, name: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, callback);
+                    GitLite.commit({dir:testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, callback);
                 //});
             });
         }
         
         asyncTest("Test Simple Git Commit", function(){
-            var cName = 'Ryan Ackley';
-            var cEmail = 'ryanackley@gmail.com';
-            var aName = 'Ryan Ackley';
-            var aEmail = 'ryanackley@gmail.com';
+            var cName = commitName;
+            var cEmail = commitEmail;
+            var aName = commitName;
+            var aEmail = commitEmail;
             var message = 'commit message';
             
             var fileName = "simple.txt";
@@ -473,7 +473,7 @@ $(document).ready(function(){
                     ok(true, 'clone was successful');
                     blowAwayWorkingDir(testDir, function(){
                         setupFileStructure(testDir, initial, function(){
-                            GitLite.commit({dir: testDir, name: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(sha){
+                            GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(sha){
                                 ok(true, 'commit of new working dir was successful');
                                 GitLite.push({dir: testDir, url: url}, function(){
                                     ok(true, 'successfully pushed into url');
@@ -530,7 +530,7 @@ $(document).ready(function(){
             
             createMirrorRepo(url, function(testDir){
                 fileutils.mkfile(testDir, '7.txt', '7\n8\n9', function(){
-                    GitLite.commit({dir: testDir, name: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(sha){
+                    GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(sha){
                         GitLite.push({dir: testDir, url: url}, function(){
                             callback();
                         });
@@ -595,7 +595,7 @@ $(document).ready(function(){
                 setupPullTest(depth, initial, function(repo){
                     createMirrorRepo(knownRepoUrl, function(testDir1){
                         setupFileStructure(testDir1, ops, function(){
-                            GitLite.commit({dir: testDir1, name: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(){
+                            GitLite.commit({dir: testDir1, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
                                 GitLite.push({dir: testDir1, url: knownRepoUrl}, function(){
                                     GitLite.pull({dir: testDir, url: knownRepoUrl}, function(){
                                         verifyHead('refs/heads/master', function(){
@@ -708,7 +708,7 @@ $(document).ready(function(){
             setupPullTest(0, initial, function(){
                 pushFastForwardCommit(knownRepoUrl, function(){
                     setupFileStructure(testDir, folderMergeChange, function(){
-                        GitLite.commit({dir: testDir, name: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(){
+                        GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
                             GitLite.pull({dir: testDir, url: knownRepoUrl}, function(){
                                 ok(false,"error should've been thrown");
                                 start();
@@ -739,8 +739,8 @@ $(document).ready(function(){
         asyncTest("No changes to commit", function(){
             GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){
                 setupFileStructure(testDir, folderMergeChange, function(){
-                    GitLite.commit({dir: testDir, name: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(){
-                        GitLite.commit({dir: testDir, name: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(){
+                    GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
+                        GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
                             ok(false, "error should've been thrown");
                             start();
                         },
@@ -756,7 +756,7 @@ $(document).ready(function(){
         asyncTest("No changes to push", function(){
             GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){
                 setupFileStructure(testDir, folderMergeChange, function(){
-                    GitLite.commit({dir: testDir, name: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(){
+                    GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
                         GitLite.push({dir: testDir, url: knownRepoUrl}, function(){
                             GitLite.push({dir: testDir, url: knownRepoUrl}, function(){
                                 ok(false, "error should've been thrown");
@@ -774,7 +774,7 @@ $(document).ready(function(){
 
         asyncTest("No remote to push to", function(){
             setupFileStructure(testDir, initial, function(){
-                GitLite.commit({dir: testDir, name: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(){
+                GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
                     GitLite.push({dir: testDir}, function(){
                         ok(false, "error should've been thrown");
                         start();
@@ -791,7 +791,7 @@ $(document).ready(function(){
             setupPullTest(0, initial, function(){
                 pushFastForwardCommit(knownRepoUrl, function(){
                     setupFileStructure(testDir, folderMergeChange, function(){
-                        GitLite.commit({dir: testDir, name: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(){
+                        GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
                             GitLite.push({dir: testDir, url: knownRepoUrl}, function(){
                                 ok(false, "error should've been thrown");
                                 start();
@@ -921,7 +921,7 @@ $(document).ready(function(){
         asyncTest('Create a branch from head, commit some changes then check out new branch', function(){
             createTestBranch('testBranch', 0, function(){
                 setupFileStructure(testDir, folderMergeAdd, function(){
-                    GitLite.commit({dir: testDir, name: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(){
+                    GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
                         GitLite.checkout({dir: testDir, branch: 'testBranch'}, function(){
                             fileutils.readFile(testDir, '.git/HEAD', 'Text', function(headRef){
                                 equal(headRef.trim(), 'ref: refs/heads/testBranch');
@@ -940,7 +940,7 @@ $(document).ready(function(){
         asyncTest('Checkout a diverged branch with uncommitted changes', function(){
             createTestBranch('testBranch', 0, function(){
                 setupFileStructure(testDir, folderMergeAdd, function(){
-                    GitLite.commit({dir: testDir, name: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(){
+                    GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
                         // one problem with checking timestamps is that the html5 filesystem records modification time 
                         // with 1 second granularisty. 
                         window.setTimeout(function(){
@@ -963,7 +963,7 @@ $(document).ready(function(){
                 createRandomTestBranch(depth, function(branchName){
                     GitLite.checkout({dir: testDir, branch: branchName}, function(){
                         setupFileStructure(testDir, folderMergeAdd, function(){
-                            GitLite.commit({dir: testDir, name: 'Ryan Ackley', email: 'ryanackley@gmail.com', commitMsg: 'commit message'}, function(){
+                            GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
                                 GitLite.push({dir: testDir}, function(){
                                     ok(true, 'push successful');
                                     start();
@@ -1119,11 +1119,25 @@ $(document).ready(function(){
                 });
             });
         }
-        $('#auth-form').submit(function(){
-            $.ajaxSetup({
-              username: $('#username').val(),
-              password: $('#password').val()
-            });
+
+        chrome.storage.local.get(null, function(data){
+            knownRepoUrl = data['knownRepoUrl'];
+            commitName = data['commitName'];
+            commitEmail = data['commitEmail'];
+
+            $('#url').val(knownRepoUrl);
+            $('#commitName').val(commitName);
+            $('#commitEmail').val(commitEmail);
+        })
+
+        $('#repo-form').submit(function(){
+            knownRepoUrl = $('#url').val();
+            commitName = $('#commitName').val();
+            commitEmail = $('#commitEmail').val();
+
+            var obj = {knownRepoUrl: knownRepoUrl, commitName: commitName, commitEmail: commitEmail};
+            chrome.storage.local.set(obj);
+
             start();
             return false;
         });

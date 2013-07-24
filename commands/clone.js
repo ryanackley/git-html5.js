@@ -18,8 +18,25 @@ define(['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index
             }
             else{
                 fileutils.ls(store.objectsDir, function(entries){
-                    if (entries.length > 0){
+                    if (entries.length > 1){
                         error({type: errutils.CLONE_GIT_DIR_IN_USE, msg: errutils.CLONE_GIT_DIR_IN_USE_MSG});
+                    }
+                    else if (entries.length == 1){
+                        if (entries[0].name == "pack"){
+                            store.objectsDir.getDirectory('pack', {create: false}, function(packDir){
+                                fileutils.ls(packDir, function(entries){
+                                    if (entries.length > 0){
+                                        error({type: errutils.CLONE_GIT_DIR_IN_USE, msg: errutils.CLONE_GIT_DIR_IN_USE_MSG});
+                                    }
+                                    else{
+                                        success();
+                                    }
+                                }, ferror);
+                            }, success);
+                        }
+                        else{
+                            error({type: errutils.CLONE_GIT_DIR_IN_USE, msg: errutils.CLONE_GIT_DIR_IN_USE_MSG});
+                        }
                     }
                     else{
                         success();

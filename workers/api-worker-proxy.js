@@ -36,12 +36,16 @@ define(['text!workers/api-worker-built.js', 'utils/errors', 'workers/worker_mess
         options.dir = options.dir.fullPath;
         if (!worker){
             worker = new Worker(workerUrl);
+            var errorHandler = error || function(e){};
             worker.onmessage = function(evt){
                 var msgHandler = callbacks[evt.data.id];
                 msgHandler.call(null, evt);
                 if (evt.data.type == GitLiteWorkerMessages.SUCCESS || evt.data.type == GitLiteWorkerMessages.ERROR){
                     delete callbacks[id];
                 }
+            }
+            worker.onerror = function(e){
+                errorHandler({msg: e.message});
             }
         }
         callbacks[id] = newResponseHandler(success, error, options.progress);
