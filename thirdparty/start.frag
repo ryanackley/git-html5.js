@@ -8,6 +8,6 @@
     } else {
         //Browser globals case. Just assign the
         //result to a property on the global.
-        root.GitLite = factory();
+        root.GitApi = factory();
     }
 }(this, function () {

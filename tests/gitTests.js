@@ -213,8 +213,8 @@ $(document).ready(function(){
                 //         callback(repo, sha);
                 //     });
                 // });
-                //GitLite.init({dir: testDir}, function(){
-                    GitLite.commit({dir:testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, callback);
+                //GitApi.init({dir: testDir}, function(){
+                    GitApi.commit({dir:testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, callback);
                 //});
             });
         }
@@ -374,7 +374,7 @@ $(document).ready(function(){
 
         var cloneTest = function(depth){
             return function(){
-                GitLite.clone({dir: testDir, url: knownRepoUrl, depth: depth}, function(){
+                GitApi.clone({dir: testDir, url: knownRepoUrl, depth: depth}, function(){
                     verifyHead('refs/heads/master', function(){
                         ok(true, 'clone was successful');
                         start();
@@ -468,14 +468,14 @@ $(document).ready(function(){
         
         var resetRemote = function(url, depth, initial, callback){
             
-            GitLite.clone({dir: testDir, url: url}, function(){
+            GitApi.clone({dir: testDir, url: url}, function(){
                 verifyHead('refs/heads/master', function(){
                     ok(true, 'clone was successful');
                     blowAwayWorkingDir(testDir, function(){
                         setupFileStructure(testDir, initial, function(){
-                            GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(sha){
+                            GitApi.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(sha){
                                 ok(true, 'commit of new working dir was successful');
-                                GitLite.push({dir: testDir, url: url}, function(){
+                                GitApi.push({dir: testDir, url: url}, function(){
                                     ok(true, 'successfully pushed into url');
                                     callback();
                                 });
@@ -509,7 +509,7 @@ $(document).ready(function(){
                 var dirEntry = fs.root;
                 dirEntry.getDirectory(root + 'testDir1', {create:true}, function(testDir){
                     //var repo = new Git.FileRepo(testDir);
-                    GitLite.clone({dir: testDir, url: url}, function(){
+                    GitApi.clone({dir: testDir, url: url}, function(){
                         callback(testDir);
                     });
                 });
@@ -520,7 +520,7 @@ $(document).ready(function(){
                 var dirEntry = fs.root;
                 dirEntry.getDirectory(root + 'testDir2', {create:true}, function(testDir){
                     //var repo = new Git.FileRepo(testDir);
-                    GitLite.clone({dir: testDir, url: url}, function(){
+                    GitApi.clone({dir: testDir, url: url}, function(){
                         callback(testDir);
                     });
                 });
@@ -530,8 +530,8 @@ $(document).ready(function(){
             
             createMirrorRepo(url, function(testDir){
                 fileutils.mkfile(testDir, '7.txt', '7\n8\n9', function(){
-                    GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(sha){
-                        GitLite.push({dir: testDir, url: url}, function(){
+                    GitApi.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(sha){
+                        GitApi.push({dir: testDir, url: url}, function(){
                             callback();
                         });
                     });
@@ -550,7 +550,7 @@ $(document).ready(function(){
             return function(){
                 setupPullTest(depth, initial, function(){
                     pushFastForwardCommit(knownRepoUrl, function(){
-                        GitLite.pull({dir: testDir, url: knownRepoUrl}, function(){
+                        GitApi.pull({dir: testDir, url: knownRepoUrl}, function(){
                             fileutils.readFile(testDir, '7.txt', 'Text', function(data){
                                 equal('7\n8\n9', data);
                                 start();
@@ -595,9 +595,9 @@ $(document).ready(function(){
                 setupPullTest(depth, initial, function(repo){
                     createMirrorRepo(knownRepoUrl, function(testDir1){
                         setupFileStructure(testDir1, ops, function(){
-                            GitLite.commit({dir: testDir1, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
-                                GitLite.push({dir: testDir1, url: knownRepoUrl}, function(){
-                                    GitLite.pull({dir: testDir, url: knownRepoUrl}, function(){
+                            GitApi.commit({dir: testDir1, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
+                                GitApi.push({dir: testDir1, url: knownRepoUrl}, function(){
+                                    GitApi.pull({dir: testDir, url: knownRepoUrl}, function(){
                                         verifyHead('refs/heads/master', function(){
                                             ok(true);
                                             start();
@@ -629,43 +629,43 @@ $(document).ready(function(){
         asyncTest("File IO error", function(){
             fileutils.mkfile(testDir, '.git', 'adasd', function(file){
                 // try to clone into a file
-                GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){ 
+                GitApi.clone({dir: testDir, url: knownRepoUrl}, function(){ 
                     ok(false, "error should've been thrown");
                     start();
                 },
                 function(e){
-                    equal(GitLite.FILE_IO_ERROR, e.type);
+                    equal(GitApi.FILE_IO_ERROR, e.type);
                     start();
                 })
             });
         });
 
         asyncTest("Ajax error", function(){
-            GitLite.clone({dir: testDir, url: "http://www.google.com"}, function(){
+            GitApi.clone({dir: testDir, url: "http://www.google.com"}, function(){
                 ok(false, "error should've been thrown");
                 start();
             },
             function(e){
-                equal(GitLite.AJAX_ERROR, e.type);
+                equal(GitApi.AJAX_ERROR, e.type);
                 start();
             });
         });
 
         asyncTest("Clone directory not empty", function(){
             fileutils.mkfile(testDir, 'test', 'adasd', function(file){
-                GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){ 
+                GitApi.clone({dir: testDir, url: knownRepoUrl}, function(){ 
                     ok(false, "error should've been thrown");
                     start();
                 },
                 function(e){
-                    equal(GitLite.CLONE_DIR_NOT_EMPTY, e.type);
+                    equal(GitApi.CLONE_DIR_NOT_EMPTY, e.type);
                     start();
                 })
             });
         });
 
         asyncTest("Clone into existing git db", function(){
-            GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){ 
+            GitApi.clone({dir: testDir, url: knownRepoUrl}, function(){ 
                 fileutils.ls(testDir, function(entries){
                     entries.asyncEach(function(entry, done){
                         if (entry.isFile){
@@ -680,12 +680,12 @@ $(document).ready(function(){
                         }
                     },
                     function(){
-                        GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){ 
+                        GitApi.clone({dir: testDir, url: knownRepoUrl}, function(){ 
                             ok(false, "error should've been thrown");
                             start();
                         },
                         function(e){
-                            equal(GitLite.CLONE_GIT_DIR_IN_USE, e.type);
+                            equal(GitApi.CLONE_GIT_DIR_IN_USE, e.type);
                             start();
                         });
                     });
@@ -694,12 +694,12 @@ $(document).ready(function(){
         });
 
         asyncTest("Clone a non-existent branch", function(){
-            GitLite.clone({dir: testDir, url: knownRepoUrl, branch: "nonexistent"}, function(){
+            GitApi.clone({dir: testDir, url: knownRepoUrl, branch: "nonexistent"}, function(){
                 ok(false, "error should've been thrown");
                 start();
             },
             function(e){
-                equal(GitLite.REMOTE_BRANCH_NOT_FOUND, e.type);
+                equal(GitApi.REMOTE_BRANCH_NOT_FOUND, e.type);
                 start();
             });
         });
@@ -708,13 +708,13 @@ $(document).ready(function(){
             setupPullTest(0, initial, function(){
                 pushFastForwardCommit(knownRepoUrl, function(){
                     setupFileStructure(testDir, folderMergeChange, function(){
-                        GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
-                            GitLite.pull({dir: testDir, url: knownRepoUrl}, function(){
+                        GitApi.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
+                            GitApi.pull({dir: testDir, url: knownRepoUrl}, function(){
                                 ok(false,"error should've been thrown");
                                 start();
                             },
                             function(e){
-                                equal(GitLite.PULL_NON_FAST_FORWARD, e.type);
+                                equal(GitApi.PULL_NON_FAST_FORWARD, e.type);
                                 start();
                             });
                         });
@@ -724,28 +724,28 @@ $(document).ready(function(){
         });
 
         asyncTest("Up to date pull", function(){
-            GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){
-                GitLite.pull({dir: testDir, url: knownRepoUrl}, function(){
+            GitApi.clone({dir: testDir, url: knownRepoUrl}, function(){
+                GitApi.pull({dir: testDir, url: knownRepoUrl}, function(){
                     ok(false, "error should've been thrown");
                     start();
                 },
                 function(e){
-                    equal(GitLite.PULL_UP_TO_DATE, e.type);
+                    equal(GitApi.PULL_UP_TO_DATE, e.type);
                     start();
                 });
             });
         });
 
         asyncTest("No changes to commit", function(){
-            GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){
+            GitApi.clone({dir: testDir, url: knownRepoUrl}, function(){
                 setupFileStructure(testDir, folderMergeChange, function(){
-                    GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
-                        GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
+                    GitApi.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
+                        GitApi.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
                             ok(false, "error should've been thrown");
                             start();
                         },
                         function(e){
-                            equal(GitLite.COMMIT_NO_CHANGES, e.type);
+                            equal(GitApi.COMMIT_NO_CHANGES, e.type);
                             start();
                         });
                     });
@@ -754,16 +754,16 @@ $(document).ready(function(){
         });
 
         asyncTest("No changes to push", function(){
-            GitLite.clone({dir: testDir, url: knownRepoUrl}, function(){
+            GitApi.clone({dir: testDir, url: knownRepoUrl}, function(){
                 setupFileStructure(testDir, folderMergeChange, function(){
-                    GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
-                        GitLite.push({dir: testDir, url: knownRepoUrl}, function(){
-                            GitLite.push({dir: testDir, url: knownRepoUrl}, function(){
+                    GitApi.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
+                        GitApi.push({dir: testDir, url: knownRepoUrl}, function(){
+                            GitApi.push({dir: testDir, url: knownRepoUrl}, function(){
                                 ok(false, "error should've been thrown");
                                 start();
                             },
                             function(e){
-                                equal(GitLite.PUSH_NO_CHANGES, e.type);
+                                equal(GitApi.PUSH_NO_CHANGES, e.type);
                                 start();
                             });
                         });
@@ -774,13 +774,13 @@ $(document).ready(function(){
 
         asyncTest("No remote to push to", function(){
             setupFileStructure(testDir, initial, function(){
-                GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
-                    GitLite.push({dir: testDir}, function(){
+                GitApi.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
+                    GitApi.push({dir: testDir}, function(){
                         ok(false, "error should've been thrown");
                         start();
                     },
                     function(e){
-                        equal(GitLite.PUSH_NO_REMOTE, e.type);
+                        equal(GitApi.PUSH_NO_REMOTE, e.type);
                         start();
                     });
                 });
@@ -791,13 +791,13 @@ $(document).ready(function(){
             setupPullTest(0, initial, function(){
                 pushFastForwardCommit(knownRepoUrl, function(){
                     setupFileStructure(testDir, folderMergeChange, function(){
-                        GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
-                            GitLite.push({dir: testDir, url: knownRepoUrl}, function(){
+                        GitApi.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
+                            GitApi.push({dir: testDir, url: knownRepoUrl}, function(){
                                 ok(false, "error should've been thrown");
                                 start();
                             },
                             function(e){
-                                equal(GitLite.PUSH_NON_FAST_FORWARD, e.type);
+                                equal(GitApi.PUSH_NON_FAST_FORWARD, e.type);
                                 start();
                             });
                         });
@@ -810,12 +810,12 @@ $(document).ready(function(){
             setupPullTest(0, initial, function(){
                 pushFastForwardCommit(knownRepoUrl, function(){
                     setupFileStructure(testDir, folderMergeChange, function(){
-                        GitLite.pull({dir: testDir, url: knownRepoUrl}, function(){
+                        GitApi.pull({dir: testDir, url: knownRepoUrl}, function(){
                             ok(false, "error should've been thrown");
                             start();
                         },
                         function(e){
-                            equal(GitLite.UNCOMMITTED_CHANGES, e.type);
+                            equal(GitApi.UNCOMMITTED_CHANGES, e.type);
                             start();
                         });
                     });
@@ -825,12 +825,12 @@ $(document).ready(function(){
 
         asyncTest("Empty repo with uncommitted changes", function(){
             setupFileStructure(testDir, initial, function(){
-                GitLite.checkForUncommittedChanges({dir: testDir}, function(){
+                GitApi.checkForUncommittedChanges({dir: testDir}, function(){
                     ok(false, "error should've been thrown");
                     start();
                 },
                 function(e){
-                    equal(GitLite.UNCOMMITTED_CHANGES, e.type);
+                    equal(GitApi.UNCOMMITTED_CHANGES, e.type);
                     start();
                 });
             });
@@ -840,7 +840,7 @@ $(document).ready(function(){
 
         var createTestBranch = function(name, cloneDepth, success){
             setupPullTest(cloneDepth, initial, function(){
-                GitLite.branch({dir: testDir, branch: name}, function(){
+                GitApi.branch({dir: testDir, branch: name}, function(){
                     fileutils.readFile(testDir, '.git/refs/heads/' + name, 'Text', function(branchSha){
                         fileutils.readFile(testDir, '.git/refs/heads/master', 'Text', function(masterSha){
                             equal(masterSha, branchSha);;
@@ -870,7 +870,7 @@ $(document).ready(function(){
                             ok(false, 'shouldn\'t get here');
                             done();  
                         }, function(e){
-                            if (e.type == GitLite.BRANCH_NAME_NOT_VALID){
+                            if (e.type == GitApi.BRANCH_NAME_NOT_VALID){
                                 ok(true, name + ' is invalid');
                             }
                             else{
@@ -891,7 +891,7 @@ $(document).ready(function(){
 
         asyncTest('Create a branch from head then immediately check it out', function(){
             createTestBranch('testBranch', 0, function(){
-                GitLite.checkout({dir: testDir, branch: 'testBranch'}, function(){
+                GitApi.checkout({dir: testDir, branch: 'testBranch'}, function(){
                     fileutils.readFile(testDir, '.git/HEAD', 'Text', function(headRef){
                         equal(headRef.trim(), 'ref: refs/heads/testBranch');
                         verifyHead('refs/heads/testBranch', function(){
@@ -905,7 +905,7 @@ $(document).ready(function(){
         asyncTest('Create a branch from head with uncommitted changes then immediately check it out', function(){
             createTestBranch('testBranch', 0, function(){
                 setupFileStructure(testDir, folderMergeAdd, function(){
-                    GitLite.checkout({dir: testDir, branch: 'testBranch'}, function(){
+                    GitApi.checkout({dir: testDir, branch: 'testBranch'}, function(){
                         fileutils.readFile(testDir, '.git/HEAD', 'Text', function(headRef){
                             equal(headRef.trim(), 'ref: refs/heads/testBranch');
                             fileutils.readFile(testDir, 'bbb/12.txt', 'Text', function(txt){
@@ -921,12 +921,12 @@ $(document).ready(function(){
         asyncTest('Create a branch from head, commit some changes then check out new branch', function(){
             createTestBranch('testBranch', 0, function(){
                 setupFileStructure(testDir, folderMergeAdd, function(){
-                    GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
-                        GitLite.checkout({dir: testDir, branch: 'testBranch'}, function(){
+                    GitApi.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
+                        GitApi.checkout({dir: testDir, branch: 'testBranch'}, function(){
                             fileutils.readFile(testDir, '.git/HEAD', 'Text', function(headRef){
                                 equal(headRef.trim(), 'ref: refs/heads/testBranch');
                                 verifyHead('refs/heads/testBranch', function(){
-                                    GitLite.checkout({dir: testDir, branch: 'master'}, function(){
+                                    GitApi.checkout({dir: testDir, branch: 'master'}, function(){
                                         verifyHead('refs/heads/master', start);
                                     });
                                 });
@@ -940,16 +940,16 @@ $(document).ready(function(){
         asyncTest('Checkout a diverged branch with uncommitted changes', function(){
             createTestBranch('testBranch', 0, function(){
                 setupFileStructure(testDir, folderMergeAdd, function(){
-                    GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
+                    GitApi.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
                         // one problem with checking timestamps is that the html5 filesystem records modification time 
                         // with 1 second granularisty. 
                         window.setTimeout(function(){
                             setupFileStructure(testDir, folderDelete, function(){
-                                GitLite.checkout({dir: testDir, branch: 'testBranch'}, function(){
+                                GitApi.checkout({dir: testDir, branch: 'testBranch'}, function(){
                                     ok(false, 'The checkout should fail');
                                     start();     
                                 }, function(e){
-                                    equal(e.type, GitLite.UNCOMMITTED_CHANGES);
+                                    equal(e.type, GitApi.UNCOMMITTED_CHANGES);
                                     start();
                                 });
                             });
@@ -961,10 +961,10 @@ $(document).ready(function(){
         var checkoutBranchChangeAndPushTest = function(depth){
             return function(){
                 createRandomTestBranch(depth, function(branchName){
-                    GitLite.checkout({dir: testDir, branch: branchName}, function(){
+                    GitApi.checkout({dir: testDir, branch: branchName}, function(){
                         setupFileStructure(testDir, folderMergeAdd, function(){
-                            GitLite.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
-                                GitLite.push({dir: testDir}, function(){
+                            GitApi.commit({dir: testDir, name: commitName, email: commitEmail, commitMsg: 'commit message'}, function(){
+                                GitApi.push({dir: testDir}, function(){
                                     ok(true, 'push successful');
                                     start();
                                 },
@@ -985,8 +985,8 @@ $(document).ready(function(){
         var checkoutBranchAndPushTest = function(depth){
             return function(){
                 createRandomTestBranch(depth, function(branchName){
-                    GitLite.checkout({dir: testDir, branch: branchName}, function(){
-                        GitLite.push({dir: testDir}, function(){
+                    GitApi.checkout({dir: testDir, branch: branchName}, function(){
+                        GitApi.push({dir: testDir}, function(){
                             ok(true, 'push successful');
                             start();
                         },

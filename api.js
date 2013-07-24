@@ -6,6 +6,7 @@
 
 define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', 'commands/push', 'commands/branch', 'commands/checkout', 'commands/conditions', 'objectstore/file_repo', 'formats/smart_http_remote', 'utils/errors', 'thirdparty/2.2.0-sha1', 'thirdparty/crc32', 'thirdparty/deflate.min', 'thirdparty/inflate.min', "workers/worker_messages"], function(clone, commit, init, pull, push, branch, checkout, Conditions, FileObjectStore, SmartHttpRemote, errutils){
     
+    /** @exports api */
     var api = {
 
         /** @constant {Number} Indicates an unexpected error in the HTML5 file system. */
@@ -85,7 +86,7 @@ define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', '
          * @param {String} options.username User name to authenticate with if the repo supports basic auth
          * @param {String} options.password password to authenticate with if the repo supports basic auth
          * @param {progressCallback} options.progress callback that gets notified of progress events.
-         * @param {pullSuccessCallback} success callback that gets notified after the pull is completed successfully.
+         * @param {successCallback} success callback that gets notified after the pull is completed successfully.
          * @param {errorCallback} error callback that gets notified if there is an error
          */
         pull : function(options, success, error){
@@ -115,7 +116,7 @@ define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', '
          * @param {String} options.name The name that will appear in the commit log as the name of the author and committer. 
          * @param {String} options.email The email that will appear in the commit log as the email of the author and committer.
          * @param {String} options.commitMsg The message that will appear in the commit log
-         * @param {pullSuccessCallback} success callback that gets notified after the commit is completed successfully.
+         * @param {successCallback} success callback that gets notified after the commit is completed successfully.
          * @param {errorCallback} error callback that gets notified if there is an error
          * 
          */
@@ -141,7 +142,7 @@ define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', '
          * @param {String} options.username User name to authenticate with if the repo supports basic auth
          * @param {String} options.password password to authenticate with if the repo supports basic auth
          * @param {progressCallback} options.progress callback that gets notified of progress events.
-         * @param {pushSuccessCallback} success callback that gets notified after the push is completed successfully.
+         * @param {successCallback} success callback that gets notified after the push is completed successfully.
          * @param {errorCallback} error callback that gets notified if there is an error
          */
         push : function(options, success, error){
@@ -163,7 +164,7 @@ define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', '
          * 
          * @param {DirectoryEntry} options.dir an HTML5 DirectoryEntry that contains a local git repo
          * @param {String} options.branch Name of the branch to create
-         * @param {pushSuccessCallback} success callback that gets notified after the push is completed successfully.
+         * @param {successCallback} success callback that gets notified after the push is completed successfully.
          * @param {errorCallback} error callback that gets notified if there is an error
          * 
          */
@@ -183,7 +184,7 @@ define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', '
          * 
          * @param {DirectoryEntry} options.dir an HTML5 DirectoryEntry that contains a local git repo
          * @param {String} options.branch Name of the branch to checkout
-         * @param {pushSuccessCallback} success callback that gets notified after the push is completed successfully.
+         * @param {successCallback} success callback that gets notified after the push is completed successfully.
          * @param {errorCallback} error callback that gets notified if there is an error 
          */
         checkout: function(options, success, error){
@@ -202,7 +203,7 @@ define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', '
          * commit and having it fail.
          * 
          * @param {DirectoryEntry} options.dir an HTML5 DirectoryEntry that contains a local git repo
-         * @param {pushSuccessCallback} success callback that gets notified after the push is completed successfully.
+         * @param {successCallback} success callback that gets notified after the push is completed successfully.
          * @param {errorCallback} error callback that gets notified if there is an error  
          */
         checkForUncommittedChanges: function(options, success, error){
@@ -215,7 +216,7 @@ define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', '
          * Retrieves the name of the currently checked out local branch . 
          * 
          * @param {DirectoryEntry} options.dir an HTML5 DirectoryEntry that contains a local git repo
-         * @param {pushSuccessCallback} success callback that gets notified after the push is completed successfully.
+         * @param {successCallback} success callback that gets notified after the push is completed successfully.
          * @param {errorCallback} error callback that gets notified if there is an error  
          */
         getCurrentBranch : function(options, success, error){
@@ -230,7 +231,7 @@ define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', '
          * Gets a list of all local branches.
          * 
          * @param {DirectoryEntry} options.dir an HTML5 DirectoryEntry that contains a local git repo
-         * @param {pushSuccessCallback} success callback that gets notified after the push is completed successfully.
+         * @param {successCallback} success callback that gets notified after the push is completed successfully.
          * @param {errorCallback} error callback that gets notified if there is an error  
          */
         getLocalBranches : function(options, success, error){
@@ -245,7 +246,7 @@ define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', '
          * @param {String} options.url url of a remote git repo
          * @param {String} options.username User name to authenticate with if the repo supports basic auth
          * @param {String} options.password password to authenticate with if the repo supports basic auth
-         * @param {pushSuccessCallback} success callback that gets notified after the push is completed successfully.
+         * @param {successCallback} success callback that gets notified after the push is completed successfully.
          * @param {errorCallback} error callback that gets notified if there is an error  
          */
         getRemoteBranches : function(options, success, error){
@@ -260,6 +261,27 @@ define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', '
                 success(remoteBranches);
             });
         }
+
+        /**
+         * error callback that gets notified if there is an error  
+         * @callback errorCallback
+         * @param {Object} err Error data object
+         * @param {Number} err.type The type of error. Should be one of the error constants in the api like {@link FILE_IO_ERROR}
+         * @param {String} err.msg An explanation of the error in English. 
+         */
+
+         /**
+         * progress callback that gets notified of the progress of various operaions  
+         * @callback progressCallback
+         * @param {Object} progress Progress data object
+         * @param {Number} progress.pct a number between 1-100 that indicates the percentage of the operation that is complete.
+         * @param {String} err.msg An description of the current state of the operation in English. 
+         */
+
+         /**
+          * success callback that gets notified when an operation completes successfully. 
+          * @callback successCallback
+          */
 
     }
     return api;
