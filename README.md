@@ -11,7 +11,7 @@ The api requires the ability to make cross-origin XHR requests. This usually mea
 
 # Demo
 
-To test the API, I ported Adobe's brackets code editor to a Chrome packaged app. I named the port Tailor. You can get it on the [Chrome Web Store](https://chrome.google.com/webstore/detail/tailor/mfakmogheanjhlgjhpijkhdjegllgenf). If you can't be bothered to try it out, I also added some demo videos to the Tailor overview page. 
+To test the API, I ported Adobe's brackets code editor to a Chrome packaged app. I named the port Tailor. You can get it on the [Chrome Web Store](https://chrome.google.com/webstore/detail/tailor/mfakmogheanjhlgjhpijkhdjegllgenf). If you can't be bothered to try it out, I also added some demo videos to the [Tailor overview page](http://tin.cr/tailor.html). 
 
 # Downloading
 
