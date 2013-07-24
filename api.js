@@ -106,7 +106,7 @@ define(['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', '
         /**
          * Looks for changes in the working directory since the last commit and adds them to the local git repo history. Some caveats
          *  
-         *  - This is does an implicit "add" of all changes including previously untracked files. 
+         *  - This is does an implicit "git add" of all changes including previously untracked files. 
          *  - A Tree created by this command will only have two file modes: 40000 for folders (subtrees) and 100644 for files (blobs).
          *  - Ignores any rules in .gitignore
          *  - Will blow-up on a working copy with too many files. On my 2010 Macbook Pro running Chrome 28, it's in the range of 10000 files. 
