@@ -7,6 +7,6 @@
     "grunt-contrib-nodeunit": "~0.2.0",
     "grunt-contrib-uglify": "~0.2.2",
     "grunt-contrib-requirejs": "~0.4.1",
-    "requirejs": "~2.1.7",
+    "requirejs": "~2.1.7"
   }
 }

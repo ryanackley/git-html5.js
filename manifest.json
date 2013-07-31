@@ -4,16 +4,15 @@
   "version": "1",
   "manifest_version": 2,
   "app": {
-    "launch": {
-      "local_path": "tests/tests.html"
+    "background": {
+      "scripts": ["tests/background.js"]
     }
   },
   "permissions": [
-  	"debugger",
-  	"contextMenus",
     "http://*/",
     "https://*/",
     "unlimitedStorage",
-    "storage"
+    "storage",
+    "syncFileSystem"
   ]
 }
