@@ -19,7 +19,14 @@ The repo includes a built version of the api. Download [api-built.js](https://ra
 
 ## Building
 
-You can also clone the repo and build it yourself. You'll need [Grunt](http://gruntjs.com/).
+You can also clone the repo and build it yourself. You'll need [Node](http://nodejs.org/download/) and [Grunt](http://gruntjs.com/) to manually build it. Once you have Node and Grunt installed, you would do something like
+
+```
+git clone https://github.com/ryanackley/git-html5.js.git
+cd git-html5.js
+npm install
+grunt
+``` 
 
 The default build of the api uses a webworker to handle the api calls. If you want don't want to use webworkers for api calls, you'll need to build using
 ```
