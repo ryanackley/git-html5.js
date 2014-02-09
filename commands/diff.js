@@ -4,6 +4,8 @@ define(["utils/misc_utils"], function (utils) {
      * takes 2 git-html5 tree objs, which have an entries prop Array
      * and creates a list of differences between the 2
      * @return a object with 3 props: added, deleted, modified, each containing the name of the tree entry
+     * NOTE: that modified is an array where each item is a array of exactly 2 tree entries which have same
+     * path name but differing SHA's.
      */
     diffTrees: function (treeA, treeB){
       console.log("diffing trees:", treeA, treeB);
@@ -13,6 +15,7 @@ define(["utils/misc_utils"], function (utils) {
           modified : []
       };
       var inBoth;
+      var treeBModEntry;
 
       diffLists.added = _removeArrayItems(treeB.entries, treeA.entries);
       diffLists.deleted = _removeArrayItems(treeA.entries, treeB.entries);
@@ -20,9 +23,10 @@ define(["utils/misc_utils"], function (utils) {
       console.log("both", inBoth);
 
       for(var i=0; i < inBoth.length; i++) {
-        if (utils.compareShas(_getTreeEntry(treeB, inBoth[i].name).sha, inBoth[i].sha) != 0) {
+        treeBModEntry = _getTreeEntry(treeB, inBoth[i].name);
+        if (utils.compareShas(treeBModEntry.sha, inBoth[i].sha) != 0) {
           if(inBoth[i].isBlob) {
-            diffLists.modified.push(inBoth[i]);
+            diffLists.modified.push([inBoth[i], treeBModEntry]);
           }
         }
       }
