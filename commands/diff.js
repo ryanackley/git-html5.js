@@ -20,7 +20,6 @@ define(["utils/misc_utils"], function (utils) {
       console.log("both", inBoth);
 
       for(var i=0; i < inBoth.length; i++) {
-        //console.log("comp", _getTreeEntry(treeB, inBoth[i].name).sha, inBoth[i].sha)
         if (utils.compareShas(_getTreeEntry(treeB, inBoth[i].name).sha, inBoth[i].sha) != 0) {
           if(inBoth[i].isBlob) {
             diffLists.modified.push(inBoth[i]);
