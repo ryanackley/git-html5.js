@@ -1,4 +1,4 @@
-define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils', 'thirdparty/2.2.0-sha1'], function(applyDelta, utils, fileutils) {
+define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils', 'thirdparty/2.2.0-sha1', 'thirdparty/crc32'], function(applyDelta, utils, fileutils, _sha1_, crc32) {
 
     String.prototype.rjust = function(width, padding) {
         padding = padding || " ";
@@ -203,7 +203,7 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils', 'thirdparty
             var object = {
                 offset: header.offset,
                 //dataOffset: dataOffset,
-                //crc: crc32.crc(data.subarray(header.offset, offset)),
+                //crc: crc32(data.subarray(header.offset, offset)),
                 type: header.type,
                 //sha: objectHash(header.type, buf),
                 // data: objData.buf
@@ -320,8 +320,7 @@ define(['objectstore/delta', 'utils/misc_utils', 'utils/file_utils', 'thirdparty
                 trackProgress();
                 for (i = 0; i < numObjects; i++) {
                     var object = matchObjectAtOffset(offset);
-
-                    object.crc = crc32.crc(data.subarray(object.offset, offset));
+                    object.crc = crc32(data.subarray(object.offset, offset));
 
                     // hold on to the data for delta style objects.
                     switch (object.type) {
