@@ -135,12 +135,13 @@ define(function() {
                     msg = 'TYPE_MISMATCH_ERR';
                     break;
                 default:
-                    msg = 'Unknown Error ' + e.code;
+                    msg = e.msg ? e.msg : ('Unknown Error ' + e.code);
                     break;
             };
+            return msg;
         },
         errorHandler: function(e) {
-            msg = utils.getFileErrorMsg(e);
+            msg = getFileErrorMsg(e);
             console.log('Error: ' + msg);
         }
     }
