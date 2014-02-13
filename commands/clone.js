@@ -7,6 +7,10 @@ define(['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index
          });
     }
     
+    /**
+     * check to make sure dir is empty except for a .git subdir and make sure
+     * the .git subdir does not already contain packfiles
+     */
     var checkDirectory = function(dir, store, success, error, ferror){
         fileutils.ls(dir, function(entries){
             
@@ -79,11 +83,9 @@ define(['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index
 
             store.setConfig(config, callback);  
         }
-
-        checkDirectory(dir, store, function(){ 
-            mkdirs(dir, ".git", function(gitDir){
+        mkdirs(dir, ".git", function(gitDir){
+            checkDirectory(dir, store, function(){
                 remote.fetchRefs(function(refs){
-                    
                     if (!refs.length){
                         createInitialConfig(null, null, success);
                         return;
@@ -142,8 +144,8 @@ define(['commands/object2file', 'formats/smart_http_remote', 'formats/pack_index
                         }, ferror);
                     }, ferror);
                 });
-            }, ferror);
-        }, error, ferror);
+            }, error, ferror);
+        }, ferror);
     }
     return clone;
 });

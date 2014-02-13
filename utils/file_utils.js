@@ -101,12 +101,15 @@ define(['utils/misc_utils'], function(utils){
 				}
 			},
 			ls: function(dir, callback, error){
+				if (!dir) {
+					error({code: 100000, msg: "cannot ls undefined or null dir"});
+				}
 				var reader = dir.createReader();
 				var entries = [];
 				
 				var readEntries = function() {
 					reader.readEntries (function(results) {
-						if (!results.length) {
+						if (results.length === 0) {
 							callback(entries);
 						} else {
 							entries = entries.concat(toArray(results));
