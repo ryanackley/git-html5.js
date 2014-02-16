@@ -124,34 +124,71 @@ define(['thirdparty/jsdiff', 'utils/misc_utils'], function (_na_, utils) { //JsD
 	}
 	
 	/**
-	 * Show a Diff for the given 2 trees, recursing down through all subtrees
+	 * Show a Diff for the diffList - an Array as returned by recursiveTreeDiff()
 	 */
-	var renderDiff = function(treeA, treeB, store) {
-		var result = diffTree(treeA, treeB);
-		console.log("Render Diff", treeA, treeB);
-		function processDiffList(objList) {
-			console.log("objList:", objList);
-			if (objList.length == 2) {
-				console.log(JsDiff.createPatch(name, objList[0].data, objList[1].data));
-			} else {
-				console.error("Did not find both Blob objects for SHA's:", objList);
-			}
-		}
+	var renderDiff = function(diffList, store, callback) {
+		var diffText = "";
+		console.log("Render DiffList:", diffList);
 		
-		console.log("Diff Result:", result);
-		for (var i=0; i < result.modified.length; i++) {
-			console.log("modified entries:", result.modified[i]);
-			if (result.modified[i].old.isBlob) {
-				var shaA = result.modified[i].old.sha;
-				var shaB = result.modified[i].nu.sha;
-				var name = result.modified[i].old.name;
-				var gitDiffPrefix = utils.convertBytesToSha(shaA).substr(0, 7)+".."+utils.convertBytesToSha(shaB).substr(0, 7);
-				store._retrieveBlobsAsStrings([shaA, shaB], processDiffList);
-			} else {
-				console.log("modified is tree:", result.modified[i]);
+		diffList.asyncEach( function(e, done, i) {
+			console.log('diff entry:', e);
+			var DEV_NULL =  '/dev/null';
+			if (e.nu && e.old) {
+				store._retrieveBlobsAsStrings([e.old.sha, e.nu.sha], function(objList) {
+					if (objList.length == 2) {
+						if (isBinary(objList[0].data) || isBinary(objList[1].data)) {
+							diffText += "Binary Files"+" "+e.path+" Differ\n";
+						} else {
+							var txt = JsDiff.createPatch(e.path, objList[0].data, objList[1].data);
+							diffText += txt+'\n';
+						}
+					} else {
+						console.error("Did not find both Blob objects for SHA's:", objList);
+					}
+					done();
+				});
+			} else if (!e.old) {
+				store._retrieveRawObject(e.nu.sha, 'Text', function(obj) {
+					if (obj) {
+						if (isBinary(obj.data)) {
+							diffText += "Binary Files"+" "+e.path+" Differ\n";
+						} else {
+							var txt = JsDiff.createPatch(e.path, "", obj.data);
+							diffText += txt+'\n';
+						}
+					} else {
+						console.error("Did not find Blob object for SHA:", obj);
+					}
+					done();
+				});
+			} else if (!e.nu) {
+				store._retrieveRawObject(e.old.sha, 'Text', function(obj) {
+					if (obj) {
+						if (isBinary(obj.data)) {
+							diffText += "Binary Files"+" "+e.path+" Differ\nu";
+						} else {
+							var txt = JsDiff.createPatch(e.path, "", obj.data);
+							diffText += txt+'\n';
+						}
+					} else {
+						console.error("Did not find Blob object for SHA:", obj);
+					}
+					done();
+				});
+			}
+		}, function() {
+			callback(diffText);
+		});
+	};
+	
+	function isBinary(str) {
+		for (var i=0; i < 8000; i++) {
+			if (str.charCodeAt(i) === 0) {
+				return true;
 			}
 		}
-	};
+		return false;
+	}
 	
 	return {
 		diffTree : diffTree,
