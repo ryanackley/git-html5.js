@@ -104,6 +104,15 @@ define(['thirdparty/inflate.min', 'thirdparty/deflate.min'], function(){
                 buffer = data.buffer.slice(data.byteOffset, data.byteLength + data.byteOffset);
             }
             return buffer;
+        },
+        //shallow concat - adds all B props to A
+        concatObjects: function(A, B) {
+            var key;
+            for (key in B) {
+                if (B.hasOwnProperty(key)) {
+                    A[key] = B[key];
+                }
+            }
         }
     }
 

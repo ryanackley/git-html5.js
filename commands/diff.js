@@ -56,43 +56,42 @@ define(['thirdparty/jsdiff', 'utils/misc_utils'], function (_na_, utils) { //JsD
 		return {add:add, remove:remove, modified: modified};
 	};
 	
-	
+	// walk down the tree and all its subtrees, returning a Array of objects, each obj has:
+	// path: path in repo
+	// status: "old", "nu"
+	// entry: the GitObject entry
 	var recursiveTreeDiff = function(oldTree, newTree, path, store, callback) {
 		console.log("recursiveTreeDiff start", oldTree, path);
 		path = (path) ? path+"/" : "";
 		var result = diffTree(oldTree, newTree);
 		console.log("diffTree result", result);
-		var treeMaps = {
-			addMap: {},
-			removeMap: {}, 
-			modifiedMap: {}
-		};
+		var treePathList = []; //each elem is obj with: path, nu, old with then pointing to a GitObject
 		
-		concatObjects(treeMaps.addMap,  mapTree(result.add, path));
-		concatObjects(treeMaps.removeMap, mapTree(result.remove, path));
-
-		result.modified.asyncEach(function(sha, done, i) {
-			var e = result.modified[i];
-			console.log("e ", i, e);
+		if (result.add.length > 0) {
+			treePathList = treePathList.concat(flattenTree(result.add, path, "nu"));
+		}
+		if (result.remove.length > 0) {
+			treePathList = treePathList.concat(flattenTree(result.remove, path, "old"));
+		}
+		result.modified.asyncEach(function(e, done, i) {
 			if (e.old.isBlob && e.nu.isBlob) { // easy both a blobs
-				treeMaps.modifiedMap[path+e.old.name] = e;
+				e.path = path+e.old.name;
+				treePathList.push(e);
 				done();
 			} else {
 				if (e.old.isBlob && !e.nu.isBlob) { // again easy whole new tree to add
-					concatObjects(treeMaps.addMap, mapTree(e.nu.entries, path));
+					treePathList = treePathList.concat(flattenTree(e.nu.entries, path, "nu"));
 					done();
 				} else if (!e.old.isBlob && e.nu.isBlob) {// again easy whole old tree to remove
-					concatObjects(treeMaps.removeMap, mapTree(e.old.entries, path));
+					treePathList = treePathList.concat(flattenTree(e.old.entries, path, "old"));
 					done();
 				} else { // bit more work - both old and nu are trees
 					var shalist = [e.old.sha, e.nu.sha];
 					store._retrieveObjectList(shalist, "Tree", function(objs) {
 						var subPath = e.old.name;
-						console.log("objs - subPath", objs, subPath);
-						recursiveTreeDiff(objs[0], objs[1], subPath, store, function(subTreeMaps) {
-							concatObjects(treeMaps.addMap, subTreeMaps.addMap);
-							concatObjects(treeMaps.removeMap, subTreeMaps.removeMap);
-							concatObjects(treeMaps.modifiedMap, subTreeMaps.modifiedMap);
+						//call ourselves with the 2 modified subtrees
+						recursiveTreeDiff(objs[0], objs[1], subPath, store, function(subTreePathList) {
+							treePathList = treePathList.concat(subTreePathList);
 							done();
 						});
 					});
@@ -100,36 +99,30 @@ define(['thirdparty/jsdiff', 'utils/misc_utils'], function (_na_, utils) { //JsD
 			}
 		},
 		function () {
-			callback(treeMaps);
+			callback(treePathList);
 		});
 	};
 	
-	// walk down the tree and all its subtrees, returning a map
-	// of pathnames to objects
-	function mapTree(entries, path) {
-		var pathMap = {};
-		console.log("mapTree", entries, path);
+	// walk down the tree and all its subtrees, returning a Array of objects, each obj has:
+	// path: path in repo
+	// status: "old", "nu"
+	// entry: the GitObject entry
+	function flattenTree(entries, path, status) {
+		var pathList = [];
 		for (var i = 0; i < entries.length; i++) {
 			var e = entries[i];
 			if (e.isBlob) { //a leaf node
-				pathMap[path+e.name] = e;
+				var d = {}
+				d.path = path+e.name;
+				d[status] = e;
+				pathList[i] = d;
 			} else { //a branch node
-				concatObjects(pathMap, mapTree(e.entries, path+e.name));
+				pathList = pathList.concat(flattenTree(e.entries, path+e.name, status));
 			}
 		}
-		return pathMap;
+		return pathList;
 	}
 	
-	//shallow concat - adds all B props to A
-	function concatObjects(A, B) {
-		var key;
-		for (key in B) {
-			if (B.hasOwnProperty(key)) {
-				A[key] = B[key];
-			}
-		}
-	}
-			
 	/**
 	 * Show a Diff for the given 2 trees, recursing down through all subtrees
 	 */
