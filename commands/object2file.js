@@ -21,8 +21,12 @@ define(['utils/file_utils'], function(fileutils){
                 else{
                     var sha = entry.sha;
                     fileutils.mkdirs(dir, entry.name, function(newDir){
-                        expandTree(newDir, store, sha, done);
-                    });
+                        if (entry.isSubmodule) {
+                            setTimeout(done, 0); //submodule dir never has contents
+                        } else {
+                            expandTree(newDir, store, sha, done);
+                        }
+                    }, function(x) { console.error("mkdir error ", x); });
                 }
             },callback);
         });

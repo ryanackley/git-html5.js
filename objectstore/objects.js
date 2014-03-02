@@ -46,10 +46,15 @@ define(['utils/misc_utils', 'thirdparty/underscore-min'], function(utils) {
                     idx++;
                 }
                 var isBlob = data[entryStart] == 49; // '1' character
+                var isSubmodule = data[entryStart+1] == 54; // '6' character
                 var nameStr = utils.bytesToString(data.subarray(entryStart + (isBlob ? 7 : 6), idx++));
+                if (isBlob && isSubmodule) { // starts with '16' so assume 160000, a git submodule
+                    isBlob = false; //do this after above subarray, as still use 7byte offset as for Blobs to read the name
+                }
                 nameStr = decodeURIComponent(escape(nameStr));
                 var entry = {
                     isBlob: isBlob,
+                    isSubmodule: isSubmodule,
                     name: nameStr,
                     sha: data.subarray(idx, idx + 20)
                 };
