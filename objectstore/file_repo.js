@@ -195,7 +195,7 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 					},
 					function(e){
 						// No commits yet
-						if (e.code == FileError.NOT_FOUND_ERR){
+						if (e.name == "NotFoundError"){
 							error({type: errutils.COMMIT_NO_CHANGES, msg: errutils.COMMIT_NO_CHANGES_MSG});
 						}
 						else{
@@ -238,7 +238,7 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 				}, fe);
 			}, 
 			function(e){
-				if (e.code == FileError.NOT_FOUND_ERR){
+				if (e.name == "NotFoundError"){
 					callback([]);
 				}
 				else{
@@ -355,7 +355,7 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 				self.load(success);
 			},
 			function(e){
-				if (e.code == FileError.NOT_FOUND_ERR){
+				if (e.name == "NotFoundError"){
 					self._init(success);
 				}
 				else{
@@ -464,7 +464,7 @@ define(['formats/pack', 'formats/pack_index', 'objectstore/objects', 'utils/misc
 			fileutils.readFile(this.dir, '.git/config.json', 'Text', function(configStr){
 				success(JSON.parse(configStr));
 			}, function(e){
-				if (e.code == FileError.NOT_FOUND_ERR){
+				if (e.name == "NotFoundError"){
 					success({});
 				}
 				else{
