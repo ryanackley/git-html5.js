@@ -10,8 +10,7 @@ git-html5.js is a pure javascript git client library. It implements a complete G
 The api requires the ability to make cross-origin XHR requests. This usually means a browser extension but theoretically there could be a git hosting service that supports [CORS](http://www.w3.org/TR/cors/). git-html5.js also depends on the [FileSystem api](http://www.html5rocks.com/en/tutorials/file/filesystem/). This means that for now it only works with Chrome and Opera. There is a [FileSystem polyfill](https://github.com/ebidel/idb.filesystem.js) for Firefox but I haven't tested to see if this would work with git-html5.js
 
 # Demo
-
-To test the API, I ported Adobe's brackets code editor to a Chrome packaged app. I named the port Tailor. You can get it on the [Chrome Web Store](https://chrome.google.com/webstore/detail/tailor/mfakmogheanjhlgjhpijkhdjegllgenf). If you can't be bothered to try it out, I also added some demo videos to the [Tailor overview page](http://tin.cr/tailor.html). 
+The previous demo was a chrome app based text editor. This demo no longer works and Chrome is deprecating chrome apps. I'm working on a new demo project. In the meantime, you can run the tests against an empty repo to see it in action. See Tests section below.
 
 # Downloading
 
@@ -46,7 +45,7 @@ This is a first version so there are some limitations
 - It's recommended that you use a depth of 1 when cloning a repo since there is no way to access commit history via the api.
 - The api only supports fast-forward merges. For more info see the section below on branching
 - If you try to work with a git repo the size of say WebKit or the Chromium project, you're gonna have a bad time. The library works well with small to medium size repos.
-- Doesn't work with repos hosted on Bitbucket.org because of this [issue](https://bitbucket.org/site/master/issue/6666/detect-git-requests-by-content-type-header). 
+- Supports bitbucket repos but you may run into problems with github. Try logging out of Github and clearing cookies if the tests fail. 
 - Only works with remote git repos that support the smart protocol over http or https 
 - Only supports basic authentication
 
