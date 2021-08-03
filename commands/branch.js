@@ -31,7 +31,7 @@ define(['utils/file_utils', 'utils/errors'], function(fileutils, errutils){
         }
 
         store._getHeadForRef('refs/heads/' + branchName, branchAlreadyExists, function(e){
-            if (e.code == FileError.NOT_FOUND_ERR){
+            if (e.code == DOMException.NOT_FOUND_ERR){
                 store.getHeadRef(function(refName){
                     store._getHeadForRef(refName, function(sha){
                         store.createNewRef('refs/heads/' + branchName, sha, success);

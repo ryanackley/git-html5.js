@@ -48,7 +48,7 @@ define(['commands/object2file', 'commands/conditions', 'utils/file_utils', 'util
             });
         }, 
         function(e){
-            if (e.code == FileError.NOT_FOUND_ERR){
+            if (e.code == DOMException.NOT_FOUND_ERR){
                 error({type: errutils.CHECKOUT_BRANCH_NO_EXISTS, msg: CHECKOUT_BRANCH_NO_EXISTS_MSG});
             }
             else{

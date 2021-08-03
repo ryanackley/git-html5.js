@@ -156,7 +156,7 @@ $(document).ready(function(){
                         ok(false, "failed to delete directory");
                         start();
                     },
-                    function(){
+                    function(e){
                         ok(true, "directory successfully deleted");
                         start();
                     });

@@ -4,8 +4,7 @@ var window = self;
     var apiWorker = factory();
     apiWorker();
     
-}(this, function () {
-/**
+}(this, function () {/**
  * almond 0.2.5 Copyright (c) 2011-2012, The Dojo Foundation All Rights Reserved.
  * Available via the MIT or new BSD license.
  * see: http://github.com/jrburke/almond for details
@@ -414,7 +413,7 @@ var requirejs, require, define;
 define("thirdparty/almond", function(){});
 
 /** @license zlib.js 2012 - imaya [ https://github.com/imaya/zlib.js ] The MIT License */
-(function() {var COMPILED = !0, goog = goog || {};
+(function() {'use strict';var COMPILED = !0, goog = goog || {};
 goog.global = this;
 goog.DEBUG = !1;
 goog.LOCALE = "en";
@@ -2864,7 +2863,7 @@ Zlib.CompressionMethod = {DEFLATE:8, RESERVED:15};
 define("thirdparty/inflate.min", function(){});
 
 /** @license zlib.js 2012 - imaya [ https://github.com/imaya/zlib.js ] The MIT License */
-(function() {var COMPILED = !0, goog = goog || {};
+(function() {'use strict';var COMPILED = !0, goog = goog || {};
 goog.global = this;
 goog.DEBUG = !1;
 goog.LOCALE = "en";
@@ -6447,40 +6446,40 @@ define('utils/errors',[],function() {
             var msg = '';
 
             switch (e.code) {
-                case FileError.QUOTA_EXCEEDED_ERR:
+                case DOMException.QUOTA_EXCEEDED_ERR:
                     msg = 'QUOTA_EXCEEDED_ERR';
                     break;
-                case FileError.NOT_FOUND_ERR:
+                case DOMException.NOT_FOUND_ERR:
                     msg = 'NOT_FOUND_ERR';
                     break;
-                case FileError.SECURITY_ERR:
+                case DOMException.SECURITY_ERR:
                     msg = 'SECURITY_ERR';
                     break;
-                case FileError.INVALID_MODIFICATION_ERR:
+                case DOMException.INVALID_MODIFICATION_ERR:
                     msg = 'INVALID_MODIFICATION_ERR';
                     break;
-                case FileError.INVALID_STATE_ERR:
+                case DOMException.INVALID_STATE_ERR:
                     msg = 'INVALID_STATE_ERR';
                     break;
-                case FileError.ABORT_ERR:
+                case DOMException.ABORT_ERR:
                     msg = 'ABORT_ERR';
                     break;
-                case FileError.ENCODING_ERR:
-                    msg = 'ENCODING_ERR';
-                    break;
-                case FileError.NOT_READABLE_ERR:
-                    msg = 'NOT_READABLE_ERR';
-                    break;
-                case FileError.NO_MODIFICATION_ALLOWED_ERR:
+                // case DOMException.ENCODING_ERR:
+                //     msg = 'ENCODING_ERR';
+                //     break;
+                // case DOMException.NOT_READABLE_ERR:
+                //     msg = 'NOT_READABLE_ERR';
+                //     break;
+                case DOMException.NO_MODIFICATION_ALLOWED_ERR:
                     msg = 'NO_MODIFICATION_ALLOWED_ERR';
                     break;
-                case FileError.PATH_EXISTS_ERR:
-                    msg = 'PATH_EXISTS_ERR';
-                    break;
-                case FileError.SYNTAX_ERR:
+                // case DOMException.PATH_EXISTS_ERR:
+                //     msg = 'PATH_EXISTS_ERR';
+                //     break;
+                case DOMException.SYNTAX_ERR:
                     msg = 'SYNTAX_ERR';
                     break;
-                case FileError.TYPE_MISMATCH_ERR:
+                case DOMException.TYPE_MISMATCH_ERR:
                     msg = 'TYPE_MISMATCH_ERR';
                     break;
                 default:
@@ -6530,24 +6529,40 @@ define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors'
         var ajaxErrorHandler = errutils.ajaxErrorFunc(error);
 
         var parseDiscovery = function(data) {
-            var lines = data.split("\n")
+
+            var dataIdx = 0;
+            var startedRefs = false;
+            var readRefs = false;
             var result = {
                 "refs": []
             }
-            for (i = 1; i < lines.length - 1; i++) {
+            var lines = [];
+            while (dataIdx < data.length){
+                let chunkLen = parseInt(data.substring(dataIdx, dataIdx + 4), 16);
+                if (chunkLen == 0){
+                    dataIdx += 4;
+                    continue;
+                }
+                lines.push(data.substring(dataIdx, dataIdx + chunkLen));
+                dataIdx += chunkLen;
+            }
+            var result = {
+                "refs": []
+            }
+            for (i = 1; i < lines.length; i++) {
                 var thisLine = lines[i]
                 if (i == 1) {
                     var bits = thisLine.split("\0")
                     result["capabilities"] = bits[1]
                     var bits2 = bits[0].split(" ")
                     result["refs"].push({
-                        name: bits2[1],
-                        sha: bits2[0].substring(8)
+                        name: bits2[1].trim(),
+                        sha: bits2[0].substring(4)
                     })
                 } else {
                     var bits2 = thisLine.split(" ")
                     result["refs"].push({
-                        name: bits2[1],
+                        name: bits2[1].trim(),
                         sha: bits2[0].substring(4)
                     })
                 }
@@ -6655,6 +6670,7 @@ define('formats/smart_http_remote',['formats/upload_pack_parser', 'utils/errors'
                 var obj = {url: url, type: 'POST'};
                 ajaxErrorHandler.call(obj, xhr); 
             }
+            xhr.setRequestHeader("Accept", "*/*");
             xhr.onerror = xhr2ErrorShim;
             xhr.onabort = xhr2ErrorShim;
             xhr.send();
@@ -7922,7 +7938,7 @@ define('commands/branch',['utils/file_utils', 'utils/errors'], function(fileutil
         }
 
         store._getHeadForRef('refs/heads/' + branchName, branchAlreadyExists, function(e){
-            if (e.code == FileError.NOT_FOUND_ERR){
+            if (e.code == DOMException.NOT_FOUND_ERR){
                 store.getHeadRef(function(refName){
                     store._getHeadForRef(refName, function(sha){
                         store.createNewRef('refs/heads/' + branchName, sha, success);
@@ -7986,7 +8002,7 @@ define('commands/checkout',['commands/object2file', 'commands/conditions', 'util
             });
         }, 
         function(e){
-            if (e.code == FileError.NOT_FOUND_ERR){
+            if (e.code == DOMException.NOT_FOUND_ERR){
                 error({type: errutils.CHECKOUT_BRANCH_NO_EXISTS, msg: CHECKOUT_BRANCH_NO_EXISTS_MSG});
             }
             else{
@@ -8381,7 +8397,7 @@ define('objectstore/file_repo',['formats/pack', 'formats/pack_index', 'objectsto
 					},
 					function(e){
 						// No commits yet
-						if (e.code == FileError.NOT_FOUND_ERR){
+						if (e.code == DOMException.NOT_FOUND_ERR){
 							error({type: errutils.COMMIT_NO_CHANGES, msg: errutils.COMMIT_NO_CHANGES_MSG});
 						}
 						else{
@@ -8424,7 +8440,7 @@ define('objectstore/file_repo',['formats/pack', 'formats/pack_index', 'objectsto
 				}, fe);
 			}, 
 			function(e){
-				if (e.code == FileError.NOT_FOUND_ERR){
+				if (e.code == DOMException.NOT_FOUND_ERR){
 					callback([]);
 				}
 				else{
@@ -8541,7 +8557,7 @@ define('objectstore/file_repo',['formats/pack', 'formats/pack_index', 'objectsto
 				self.load(success);
 			},
 			function(e){
-				if (e.code == FileError.NOT_FOUND_ERR){
+				if (e.code == DOMException.NOT_FOUND_ERR){
 					self._init(success);
 				}
 				else{
@@ -8650,7 +8666,7 @@ define('objectstore/file_repo',['formats/pack', 'formats/pack_index', 'objectsto
 			fileutils.readFile(this.dir, '.git/config.json', 'Text', function(configStr){
 				success(JSON.parse(configStr));
 			}, function(e){
-				if (e.code == FileError.NOT_FOUND_ERR){
+				if (e.code == DOMException.NOT_FOUND_ERR){
 					success({});
 				}
 				else{
@@ -8809,49 +8825,44 @@ GitLiteWorkerMessages = {
 };
 define("workers/worker_messages", function(){});
 
-// requirejs.config({
-//     shim: {
-
-//     }
-// });
 
 define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pull', 'commands/push', 'commands/branch', 'commands/checkout', 'commands/conditions', 'objectstore/file_repo', 'formats/smart_http_remote', 'utils/errors', 'thirdparty/2.2.0-sha1', 'thirdparty/crc32', 'thirdparty/deflate.min', 'thirdparty/inflate.min', "workers/worker_messages"], function(clone, commit, init, pull, push, branch, checkout, Conditions, FileObjectStore, SmartHttpRemote, errutils){
     
-    /** @exports api */
+    /** @exports GitApi */
     var api = {
 
-        /** @constant {Number} Indicates an unexpected error in the HTML5 file system. */
+        /** @desc Indicates an unexpected error in the HTML5 file system. */
         FILE_IO_ERROR: errutils.FILE_IO_ERROR,
-        /** @constant {Number} Indicates an unexpected ajax error when trying to make a request */
+        /** @desc Indicates an unexpected ajax error when trying to make a request */
         AJAX_ERROR: errutils.AJAX_ERROR, 
-        /** @constant {Number} trying to clone into a non-empty directory */
+        /** @desc trying to clone into a non-empty directory */
         CLONE_DIR_NOT_EMPTY: errutils.CLONE_DIR_NOT_EMPTY,
-        /** @constant {Number} Trying to clone into directory that contains a .git directory that already contains objects */
+        /** @desc Trying to clone into directory that contains a .git directory that already contains objects */
         CLONE_GIT_DIR_IN_USE: errutils.CLONE_GIT_DIR_IN_USE,
-        /** @constant {Number} No branch found with the name given.  */
+        /** @desc No branch found with the name given.  */
         REMOTE_BRANCH_NOT_FOUND: errutils.REMOTE_BRANCH_NOT_FOUND,
-        /** @constant {Number} A pull was attempted that would require a non-fast-forward. The API only supports fast forward merging at the moment. */
+        /** @desc A pull was attempted that would require a non-fast-forward. The API only supports fast forward merging at the moment. */
         PULL_NON_FAST_FORWARD: errutils.PULL_NON_FAST_FORWARD,
-        /** @constant {Number} A pull was attempted but the local git repo is up to date */
+        /** @desc A pull was attempted but the local git repo is up to date */
         PULL_UP_TO_DATE: errutils.PULL_UP_TO_DATE,
-        /** @constant {Number} A commit was attempted but the local git repo has no new changes to commit */
+        /** @desc A commit was attempted but the local git repo has no new changes to commit */
         COMMIT_NO_CHANGES: errutils.COMMIT_NO_CHANGES,
-        /** @constant {Number} A push was attempted but the remote repo is up to date. */
+        /** @desc A push was attempted but the remote repo is up to date. */
         PUSH_NO_CHANGES: errutils.PUSH_NO_CHANGES,
-        /** @constant {Number} A push was attempted but the remote has new commits that the local repo doesn't know about. 
+        /** @desc A push was attempted but the remote has new commits that the local repo doesn't know about. 
          * You would normally do a pull and merge remote changes first. Unfortunately, this isn't possible with this API. 
          * As a workaround, you could create and checkout a new branch and then do a push. */
         PUSH_NON_FAST_FORWARD: errutils.PUSH_NON_FAST_FORWARD,
-        /** @constant {Number} Indicates an unexpected problem retrieving objects */
+        /** @desc Indicates an unexpected problem retrieving objects */
         OBJECT_STORE_CORRUPTED: errutils.OBJECT_STORE_CORRUPTED,
-        /** @constant {Number} A pull was attempted with uncommitted changed in the working copy */
+        /** @desc A pull was attempted with uncommitted changed in the working copy */
         UNCOMMITTED_CHANGES: errutils.UNCOMMITTED_CHANGES,
-        /** @constant {Number} 401 when attempting to make a request. */
+        /** @desc 401 when attempting to make a request. */
         HTTP_AUTH_ERROR: errutils.HTTP_AUTH_ERROR,
 
-        /** @constant {Number} The branch doesn't follow valid git branch naming rules. */
+        /** @desc The branch doesn't follow valid git branch naming rules. */
         BRANCH_NAME_NOT_VALID: errutils.BRANCH_NAME_NOT_VALID,
-        /** @constant {Number} Trying to push a repo without a valid remote. 
+        /** @desc Trying to push a repo without a valid remote. 
          * This can happen if it's a first push to blank repo and a url wasn't specified as one of the options. */
         PUSH_NO_REMOTE: errutils.PUSH_NO_REMOTE,
         
@@ -8861,6 +8872,7 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
          * that a depth of 1 always be given since the api does not currently give a way 
          * to access the commit history of a repo.  
          * 
+         * @param {Object} options 
          * @param {DirectoryEntry} options.dir an HTML5 DirectoryEntry to clone the repo into
          * @param {String} [options.branch=HEAD] the name of the remote branch to clone.
          * @param {String} options.url the url of the repo to clone from
@@ -8868,7 +8880,7 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
          * @param {String} [options.username] User name to authenticate with if the repo supports basic auth
          * @param {String} [options.password] password to authenticate with if the repo supports basic auth
          * @param {progressCallback} [options.progress] callback that gets notified of progress events.
-         * @param {cloneSuccessCallback} success callback that gets notified after the clone is completed successfully
+         * @param {successCallback} success callback that gets notified after the clone is completed successfully
          * @param {errorCallback} [error] callback that gets notified if there is an error
          */
         clone : function(options, success, error){
@@ -8893,12 +8905,13 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
          * Does a pull from the url the local repo was cloned from. Will only succeed for fast-forward pulls.
          * If a merge is required, it calls the error callback 
          * 
+         * @param {Object} options 
          * @param {DirectoryEntry} options.dir an HTML5 DirectoryEntry that contains a local git repo to pull updates into
-         * @param {String} options.username User name to authenticate with if the repo supports basic auth
-         * @param {String} options.password password to authenticate with if the repo supports basic auth
-         * @param {progressCallback} options.progress callback that gets notified of progress events.
-         * @param {pullSuccessCallback} success callback that gets notified after the pull is completed successfully.
-         * @param {errorCallback} error callback that gets notified if there is an error
+         * @param {String} [options.username] User name to authenticate with if the repo supports basic auth
+         * @param {String} [options.password] password to authenticate with if the repo supports basic auth
+         * @param {progressCallback} [options.progress] callback that gets notified of progress events.
+         * @param {successCallback} success callback that gets notified after the pull is completed successfully.
+         * @param {errorCallback} [error] callback that gets notified if there is an error
          */
         pull : function(options, success, error){
             var objectStore = new FileObjectStore(options.dir);
@@ -8918,17 +8931,19 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
         /**
          * Looks for changes in the working directory since the last commit and adds them to the local git repo history. Some caveats
          *  
-         *  - This is does an implicit "git add" of all changes including previously untracked files. 
-         *  - A Tree created by this command will only have two file modes: 40000 for folders (subtrees) and 100644 for files (blobs).
-         *  - Ignores any rules in .gitignore
-         *  - Will blow-up on a working copy with too many files. On my 2010 Macbook Pro running Chrome 28, it's in the range of 10000 files. 
-         * 
+         *  <ul>
+         *  <li>This is does an implicit "git add" of all changes including previously untracked files.</li>
+         *  <li>A Tree created by this command will only have two file modes: 40000 for folders (subtrees) and 100644 for files (blobs).</li>
+         *  <li>Ignores any rules in .gitignore</li>
+         *  </ul>
+         *
+         * @param {Object} options 
          * @param {DirectoryEntry} options.dir an HTML5 DirectoryEntry to look for changes and commit them to the .git subdirectory in the same driectory
          * @param {String} options.name The name that will appear in the commit log as the name of the author and committer. 
          * @param {String} options.email The email that will appear in the commit log as the email of the author and committer.
          * @param {String} options.commitMsg The message that will appear in the commit log
-         * @param {pullSuccessCallback} success callback that gets notified after the commit is completed successfully.
-         * @param {errorCallback} error callback that gets notified if there is an error
+         * @param {successCallback} success callback that gets notified after the commit is completed successfully.
+         * @param {errorCallback} [error] callback that gets notified if there is an error
          * 
          */
         commit : function(options, success, error){
@@ -8948,13 +8963,14 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
          * Pushes local commits to a remote repo. This is usually the remote repo the local repo was cloned from. It can also be 
          * the initial push to a blank repo.
          * 
+         * @param {Object} options 
          * @param {DirectoryEntry} options.dir an HTML5 DirectoryEntry to push changes from
          * @param {String} [options.url] the remote url to push changes to. This defaults to the url the repo was cloned from. 
-         * @param {String} options.username User name to authenticate with if the repo supports basic auth
-         * @param {String} options.password password to authenticate with if the repo supports basic auth
-         * @param {progressCallback} options.progress callback that gets notified of progress events.
-         * @param {pushSuccessCallback} success callback that gets notified after the push is completed successfully.
-         * @param {errorCallback} error callback that gets notified if there is an error
+         * @param {String} [options.username] User name to authenticate with if the repo supports basic auth
+         * @param {String} [options.password] password to authenticate with if the repo supports basic auth
+         * @param {progressCallback} [options.progress] callback that gets notified of progress events.
+         * @param {successCallback} success callback that gets notified after the push is completed successfully.
+         * @param {errorCallback} [error] callback that gets notified if there is an error
          */
         push : function(options, success, error){
             var objectStore = new FileObjectStore(options.dir);
@@ -8973,10 +8989,11 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
         /**
          * Creates a local branch. You will need to call the checkout api command to check it out. 
          * 
+         * @param {Object} options 
          * @param {DirectoryEntry} options.dir an HTML5 DirectoryEntry that contains a local git repo
          * @param {String} options.branch Name of the branch to create
-         * @param {pushSuccessCallback} success callback that gets notified after the push is completed successfully.
-         * @param {errorCallback} error callback that gets notified if there is an error
+         * @param {successCallback} success callback that gets notified after the push is completed successfully.
+         * @param {errorCallback} [error] callback that gets notified if there is an error
          * 
          */
         branch: function(options, success, error){
@@ -8993,10 +9010,11 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
         /**
          * Checks out a local branch. 
          * 
+         * @param {Object} options 
          * @param {DirectoryEntry} options.dir an HTML5 DirectoryEntry that contains a local git repo
          * @param {String} options.branch Name of the branch to checkout
-         * @param {pushSuccessCallback} success callback that gets notified after the push is completed successfully.
-         * @param {errorCallback} error callback that gets notified if there is an error 
+         * @param {successCallback} success callback that gets notified after the push is completed successfully.
+         * @param {errorCallback} [error] callback that gets notified if there is an error 
          */
         checkout: function(options, success, error){
             var objectStore = new FileObjectStore(options.dir);
@@ -9013,9 +9031,10 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
          * Looks in the working directory for uncommitted changes. This is faster than attempting a 
          * commit and having it fail.
          * 
+         * @param {Object} options 
          * @param {DirectoryEntry} options.dir an HTML5 DirectoryEntry that contains a local git repo
-         * @param {pushSuccessCallback} success callback that gets notified after the push is completed successfully.
-         * @param {errorCallback} error callback that gets notified if there is an error  
+         * @param {successCallback} success callback that gets notified after the push is completed successfully.
+         * @param {errorCallback} [error] callback that gets notified if there is an error  
          */
         checkForUncommittedChanges: function(options, success, error){
             var objectStore = new FileObjectStore(options.dir);
@@ -9026,9 +9045,10 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
         /**
          * Retrieves the name of the currently checked out local branch . 
          * 
+         * @param {Object} options 
          * @param {DirectoryEntry} options.dir an HTML5 DirectoryEntry that contains a local git repo
-         * @param {pushSuccessCallback} success callback that gets notified after the push is completed successfully.
-         * @param {errorCallback} error callback that gets notified if there is an error  
+         * @param {successCallback} success callback that gets notified after the push is completed successfully.
+         * @param {errorCallback} [error] callback that gets notified if there is an error  
          */
         getCurrentBranch : function(options, success, error){
             var objectStore = new FileObjectStore(options.dir);
@@ -9041,9 +9061,10 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
         /**
          * Gets a list of all local branches.
          * 
+         * @param {Object} options 
          * @param {DirectoryEntry} options.dir an HTML5 DirectoryEntry that contains a local git repo
-         * @param {pushSuccessCallback} success callback that gets notified after the push is completed successfully.
-         * @param {errorCallback} error callback that gets notified if there is an error  
+         * @param {successCallback} success callback that gets notified after the push is completed successfully.
+         * @param {errorCallback} [error] callback that gets notified if there is an error  
          */
         getLocalBranches : function(options, success, error){
             var objectStore = new FileObjectStore(options.dir);
@@ -9054,11 +9075,12 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
         /**
          * Gets a list of all remote branches. 
          * 
+         * @param {Object} options 
          * @param {String} options.url url of a remote git repo
-         * @param {String} options.username User name to authenticate with if the repo supports basic auth
-         * @param {String} options.password password to authenticate with if the repo supports basic auth
-         * @param {pushSuccessCallback} success callback that gets notified after the push is completed successfully.
-         * @param {errorCallback} error callback that gets notified if there is an error  
+         * @param {String} [options.username] User name to authenticate with if the repo supports basic auth
+         * @param {String} [options.password] password to authenticate with if the repo supports basic auth
+         * @param {successCallback} success callback that gets notified after the push is completed successfully.
+         * @param {errorCallback} [error] callback that gets notified if there is an error  
          */
         getRemoteBranches : function(options, success, error){
             var remote = SmartHttpRemote(null, null, options.url, options.username, options.password, error);
@@ -9072,6 +9094,27 @@ define('api',['commands/clone', 'commands/commit', 'commands/init', 'commands/pu
                 success(remoteBranches);
             });
         }
+
+        /**
+         * error callback that gets notified if there is an error  
+         * @callback errorCallback
+         * @param {Object} err Error data object
+         * @param {Number} err.type The type of error. Should be one of the error constants in the api like {@link FILE_IO_ERROR}
+         * @param {String} err.msg An explanation of the error in English. 
+         */
+
+         /**
+         * progress callback that gets notified of the progress of various operaions  
+         * @callback progressCallback
+         * @param {Object} progress Progress data object
+         * @param {Number} progress.pct a number between 1-100 that indicates the percentage of the operation that is complete.
+         * @param {String} progress.msg An description of the current state of the operation in English. 
+         */
+
+         /**
+          * success callback that gets notified when an operation completes successfully. 
+          * @callback successCallback
+          */
 
     }
     return api;
@@ -9158,7 +9201,8 @@ define('workers/api-worker',['api', 'utils/errors', 'workers/worker_messages'], 
             }
         }
     }
-});    //The modules for your project will be inlined above
+});
+    //The modules for your project will be inlined above
     //this snippet. Ask almond to synchronously require the
     //module value for 'main' here and return it as the
     //value to use for the public API for the built file.

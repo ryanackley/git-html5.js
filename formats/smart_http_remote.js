@@ -13,24 +13,40 @@ define(['formats/upload_pack_parser', 'utils/errors', 'utils/progress_chunker'],
         var ajaxErrorHandler = errutils.ajaxErrorFunc(error);
 
         var parseDiscovery = function(data) {
-            var lines = data.split("\n")
+
+            var dataIdx = 0;
+            var startedRefs = false;
+            var readRefs = false;
             var result = {
                 "refs": []
             }
-            for (i = 1; i < lines.length - 1; i++) {
+            var lines = [];
+            while (dataIdx < data.length){
+                let chunkLen = parseInt(data.substring(dataIdx, dataIdx + 4), 16);
+                if (chunkLen == 0){
+                    dataIdx += 4;
+                    continue;
+                }
+                lines.push(data.substring(dataIdx, dataIdx + chunkLen));
+                dataIdx += chunkLen;
+            }
+            var result = {
+                "refs": []
+            }
+            for (i = 1; i < lines.length; i++) {
                 var thisLine = lines[i]
                 if (i == 1) {
                     var bits = thisLine.split("\0")
                     result["capabilities"] = bits[1]
                     var bits2 = bits[0].split(" ")
                     result["refs"].push({
-                        name: bits2[1],
-                        sha: bits2[0].substring(8)
+                        name: bits2[1].trim(),
+                        sha: bits2[0].substring(4)
                     })
                 } else {
                     var bits2 = thisLine.split(" ")
                     result["refs"].push({
-                        name: bits2[1],
+                        name: bits2[1].trim(),
                         sha: bits2[0].substring(4)
                     })
                 }
@@ -138,6 +154,7 @@ define(['formats/upload_pack_parser', 'utils/errors', 'utils/progress_chunker'],
                 var obj = {url: url, type: 'POST'};
                 ajaxErrorHandler.call(obj, xhr); 
             }
+            xhr.setRequestHeader("Accept", "*/*");
             xhr.onerror = xhr2ErrorShim;
             xhr.onabort = xhr2ErrorShim;
             xhr.send();
